@@ -22,8 +22,8 @@ leaves the Mac.
 The design rules:
 
 - **Grouped by what you're doing.** Reading is ✌️ (scroll, back/forward). Windows are the
-  whole hand: ✋ swipes desktops, ✊ grabs the app switcher. Media is 🤏, used like a
-  remote: tap to play/pause, slide for volume or tracks. No family mixes two jobs.
+  whole hand: ✋ swipes desktops, ✊ grabs the app switcher. Media is 👌, used like a
+  remote: tap to play/pause, hold and slide for volume or tracks. No family mixes two jobs.
 - **Trackpad muscle memory.** Two fingers scroll and go back/forward; a whole hand
   switches desktops; content follows your hand, with natural scrolling.
 - **Flicks, not positions.** A scroll is a flick with momentum, so flick again to go
@@ -32,28 +32,40 @@ The design rules:
 - **Aiming is opt-in.** The pointer is a separate mode (☝️ hold), because aiming takes
   concentration and everyday gestures shouldn't.
 - **Both hands, either hand.** Every one-hand gesture works with either hand. Both hands
-  together are kept for big, rare actions: 👏👏 rest/wake, part the curtains to show
-  the desktop, frame with both hands for a screenshot.
+  together are kept for big, rare actions: both hands up to rest/wake, part the
+  curtains to show the desktop, frame with both hands for a screenshot.
 
 ### Rest and wake
 
-Clap twice and Sleight **rests**: the camera keeps watching, but nothing you do with
-your hands triggers anything except another double clap, which wakes it. Use it while
-eating, on calls, or when you talk with your hands. `⌃⌥S` does the same; turning the
-camera fully off is a separate menu item. The menu bar mark loses its point while
-resting.
+Raise both open hands, palms to the screen and shoulder-width apart, as if saying "hold
+on", and keep them still for a second: a ring fills, and Sleight **rests**. The camera
+keeps watching, but nothing you do triggers anything except the same gesture, which
+wakes it. `⌃⌥S` does the same; turning the camera fully off is a separate menu item.
 
-A single clap does nothing (rubbing or folding hands looks similar), so a double clap
-is never accidental. Hands hide each other at the moment they meet and the tracker often
-loses one, so a clap is detected as "two hands rushing together, then touching *or
-merging*".
+A double clap can do it too (Settings, experimental, off by default): at the moment of
+a clap the hands are edge-on and hide each other, so the camera alone misses many.
+
+### Practice
+
+**Menu → Practice Gestures…** opens a window with the live camera and your hand
+skeleton, every gesture explained in plain words, and a counter that lights up each
+time one is recognised. Nothing happens on your Mac while it's open. It also records
+hand landmarks (positions only, no video) to `recordings/practice-*.jsonl`, so
+thresholds can be tuned against real hands.
+
+### Media without false triggers
+
+The media "remote" is an **OK sign** 👌 (thumb and index tips touching, other three
+fingers up) that **closes from open fingers**: a relaxed hand that merely looks pinched
+never qualifies. Volume and track skip need the pinch held still for a beat first, and
+a pinch made while the hand is moving is ignored.
 
 ### Always know what's about to happen
 
 <p align="center"><img src="docs/images/chips.png" width="420" alt="Gesture chips"></p>
 
 A small chip at the top of the screen shows what the hand in view will do *before*
-you act ("Flick to scroll", "Media: let go = play/pause, slide = volume / track"), and
+you act ("Flick to scroll", "Media: let go = play/pause, ↕ volume, ↔ track"), and
 flashes a confirmation when something fires. Turn the hints off in the menu once you
 know them; the confirmations stay.
 
@@ -92,7 +104,7 @@ click events). The build signs with your Apple Development certificate when ther
 one, so the grants survive rebuilds.
 
 ```bash
-swift test                      # 68 engine tests, no camera needed
+swift test                      # 76 engine tests, no camera needed
 ```
 
 | Launch flag (`open -n ~/Applications/Sleight.app --args …`) | |
@@ -132,7 +144,9 @@ term.
 | **Talking with your hands** | Slow or wandering motion never fires; flicks need speed, distance and one dominant axis. |
 | **Shape flicker** between frames | A new shape must persist before it counts; pinch closes instantly but opens with hysteresis. |
 | **⌘ stuck down** in the app switcher | Losing the hand or touching the keyboard mid-switch cancels it cleanly. |
-| **Clap vs. curtains** | Parting the hands after a clap never counts as curtains: curtains need the hands held together first. |
+| **Accidental media** | OK sign required, closed from open fingers, held still before sliding. |
+| **Flicks near the bottom of the frame** | A flick that starts in view is followed even when it carries the hand into the ignored keyboard zone. |
+| **Wrist-snap flicks** | Flicks are measured between the palm and the fingertips, so a snap of the wrist counts. |
 | **HUD in your screenshot** | Sleight's own overlay is excluded from screen capture and sharing. |
 | **Ghost hands** in dark rooms | Low-confidence detections are rejected (a real dark-room recording is a regression test). |
 | **Background people** | Tiny hands are ignored; the hand doing a gesture keeps it even if another appears. |
@@ -150,14 +164,14 @@ Sources/
     HandTracks          up to two hands across frames: filtering, debounced shape and pinch
     Flick               deliberate-flick detector (settle, dominance, return-stroke lockout)
     CommandEngine       everyday one-hand gestures
-    TwoHandGestures     double clap, curtains, frame
+    TwoHandGestures     hands up (rest/wake), curtains, frame, double clap
     PointerEngine       pointer mode
     SleightEngine       active/resting, mode switching, real-input override
   Sleight/            the app: camera, Vision, output (glide, momentum, media keys, ⌘-Tab),
                       input monitor, overlay chip + ring + intro, mode bar, keyboard,
                       menu bar, settings, guide, preview & tuning
   SleightBrand/       the logo, drawn in code
-Tests/SleightCoreTests  68 tests, including a real dark-room replay
+Tests/SleightCoreTests  76 tests, including a real dark-room replay
 ```
 
 ## The name and the mark

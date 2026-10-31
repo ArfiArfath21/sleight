@@ -24,12 +24,14 @@ struct SettingsView: View {
                 Toggle("✋ Swipe left/right for desktops, up for Mission Control", isOn: $store.config.swipesEnabled)
                 Toggle("✋ Swipe down for app windows (Exposé)", isOn: $store.config.swipeDownEnabled)
                 Toggle("✊ Grab and slide to switch apps", isOn: $store.config.grabEnabled)
+                Toggle("👌 Media needs an OK sign (other fingers up)", isOn: $store.config.mediaNeedsOKSign)
                 Toggle("🤏 Slide sideways to skip tracks", isOn: $store.config.trackSkipEnabled)
                 Toggle("Natural scrolling", isOn: $store.config.scrollNatural)
                 Toggle("Show gesture hints", isOn: $store.showHints)
             }
             Section("Two hands") {
-                Toggle("👏👏 Double clap to rest / wake", isOn: $store.config.clapEnabled)
+                Toggle("🙌 Both hands up, held, to rest / wake", isOn: $store.config.handsUpEnabled)
+                Toggle("👏👏 Double clap to rest / wake (experimental: the camera misses many claps)", isOn: $store.config.clapEnabled)
                 Toggle("🖐🖐 Part the curtains to show the desktop", isOn: $store.config.curtainsEnabled)
                 Toggle("Frame with both hands to take a screenshot", isOn: $store.config.frameEnabled)
                 Tunable("Clap speed needed", value: $store.config.clapApproachSpeed, range: 2...12, format: "%.1f hand/s",

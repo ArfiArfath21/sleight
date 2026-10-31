@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var settingsWindow: NSWindow?
     private var previewWindow: PreviewWindowController?
     private var guideWindow: NSWindow?
+    private var practice: PracticeWindowController?
 
     let launchOptions: LaunchOptions
 
@@ -85,9 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         checkPermissions()
         setEnabled(true)
-        if !UserDefaults.standard.bool(forKey: "seenGuide") {
-            UserDefaults.standard.set(true, forKey: "seenGuide")
-            showGuide()
+        if !UserDefaults.standard.bool(forKey: "seenPractice") {
+            UserDefaults.standard.set(true, forKey: "seenPractice")
+            showPractice()
         }
     }
 
@@ -142,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func handle(_ action: EngineAction) {
+        practice?.handle(action, natural: store.config.scrollNatural)
         if let chip = Chip.flash(for: action) { overlay.flash(chip) }
         switch action {
         case .modeChanged(let m, _):
@@ -224,6 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(cameraItem)
 
         menu.addItem(.separator())
+        menu.addItem(item("Practice Gestures…", #selector(showPractice), ""))
         menu.addItem(item("Gesture Guide…", #selector(showGuide), "g"))
         menu.addItem(item("Camera Preview & Tuning…", #selector(showPreview), ""))
         menu.addItem(item("Settings…", #selector(showSettings), ","))
@@ -315,8 +318,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func showGuide() {
-        if guideWindow == nil { guideWindow = GuideWindow.make() }
+        if guideWindow == nil {
+            guideWindow = GuideWindow.make(onPractice: { [weak self] in
+                self?.guideWindow?.close()
+                self?.showPractice()
+            })
+        }
         present(guideWindow!)
+    }
+
+    @objc func showPractice() {
+        if !enabled { setEnabled(true) }
+        if practice == nil { practice = PracticeWindowController(pipeline: pipeline) }
+        practice?.open()
     }
 
     @objc func showPreview() {

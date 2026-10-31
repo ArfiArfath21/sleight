@@ -73,6 +73,7 @@ public struct HUDState: Equatable, Sendable {
         case curtains    // 🖐🖐 held together: part them to show the desktop
         case frame       // two "L" hands: hold to take a screenshot
         case clap        // first clap heard: clap again
+        case handsUp     // both hands raised and still: hold to rest / wake
     }
 
     public var mode: Mode = .command

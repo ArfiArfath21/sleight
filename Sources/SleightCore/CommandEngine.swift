@@ -79,11 +79,13 @@ public final class CommandEngine {
         if remote != nil { stepRemote(tracks: tracks, time: t, hud: &hud, result: &r); return r }
         if grab != nil { stepGrab(tracks: tracks, time: t, hud: &hud, result: &r); return r }
 
-        let ready = tracks.visible.filter { $0.anchor.y < config.activeBelowLine }
+        // Hands resting low (on the keyboard) are ignored, but a flick that
+        // carries the hand down into that zone is still followed.
+        let ready = tracks.visible.filter { $0.wasAbove(config.activeBelowLine, within: 0.5, at: t) }
         guard let hand = primary(ready) else { pointSince = nil; return r }
         let settled = t - hand.firstSeen >= config.settleTime
 
-        if hand.pinchBegan, settled {
+        if hand.pinchBegan, settled, hand.pinchDeliberate, hand.pinchOKSign || !config.mediaNeedsOKSign {
             remote = Remote(handID: hand.id, start: t, origin: hand.anchor)
             hud.cue = .media
             pointSince = nil
@@ -201,6 +203,12 @@ public final class CommandEngine {
         }
 
         let offset = (hand.anchor - m.origin) / hand.scale
+        let held = t - m.start
+        // A hand that pinched while moving is not using the remote: drop it silently.
+        if held < config.mediaHold {
+            if offset.length > config.mediaEarlyMoveCancel { remote = nil }
+            return
+        }
         if m.axis == nil, offset.length >= config.pinchAxisLock {
             if abs(offset.y) >= abs(offset.x) {
                 m.axis = .vertical

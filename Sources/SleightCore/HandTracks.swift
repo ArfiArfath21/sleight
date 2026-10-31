@@ -5,6 +5,9 @@ import Foundation
 public final class TrackedHand {
     public struct Sample: Sendable {
         public var anchor: Vec2
+        /// Where a flick is measured: between the palm and the fingertips, so a
+        /// snap of the wrist (which mostly moves the fingers) counts.
+        public var flickPoint: Vec2
         public var scale: Double
         public var shape: HandShape
     }
@@ -34,11 +37,18 @@ public final class TrackedHand {
     /// True only on the frame the pinch closed / opened.
     public private(set) var pinchBegan = false
     public private(set) var pinchEnded = false
+    /// The pinch closed from clearly-open fingers moments before: an actual
+    /// pinching motion, not a hand that merely looks pinched.
+    public private(set) var pinchDeliberate = false
+    /// The other three fingers were up when the pinch closed (👌).
+    public private(set) var pinchOKSign = false
+    private var lastWideOpen = -Double.infinity
 
     public private(set) var history = TimedHistory<Sample>(span: 0.8)
     public private(set) var pinchHistory = TimedHistory<Double>(span: 0.5)
 
     private var filter: OneEuroFilter2D
+    private var tipFilter: OneEuroFilter2D
     private var candidateShape: HandShape
     private var candidateFrames = 0
     private var releaseFrames = 0
@@ -50,6 +60,8 @@ public final class TrackedHand {
         filter = OneEuroFilter2D(minCutoff: config.filterMinCutoff, beta: config.filterBeta,
                                  derivativeCutoff: config.filterDerivativeCutoff)
         anchor = filter.filter(pose.anchor * 1000, time: time) / 1000
+        tipFilter = OneEuroFilter2D(minCutoff: config.filterMinCutoff, beta: config.filterBeta,
+                                    derivativeCutoff: config.filterDerivativeCutoff)
         scale = pose.scale
         firstSeen = time
         lastSeen = time
@@ -58,8 +70,17 @@ public final class TrackedHand {
         shape = s
         shapeSince = time
         candidateShape = s
-        history.append(Sample(anchor: anchor, scale: scale, shape: s), at: time)
+        let fp = tipFilter.filter(TrackedHand.flickPoint(pose, config: config) * 1000, time: time) / 1000
+        history.append(Sample(anchor: anchor, flickPoint: fp, scale: scale, shape: s), at: time)
         pinchHistory.append(pose.pinchIndex, at: time)
+        if pose.pinchIndex > config.pinchArmOpen { lastWideOpen = time }
+    }
+
+    static func flickPoint(_ pose: HandPose, config: SleightConfig) -> Vec2 {
+        let c = config.minJointConfidence
+        guard let i = pose.frame.position(.indexTip, minConfidence: c),
+              let m = pose.frame.position(.middleTip, minConfidence: c) else { return pose.anchor }
+        return lerp(pose.anchor, (i + m) / 2, config.flickTipWeight)
     }
 
     func update(pose: HandPose, time t: Double, config: SleightConfig) {
@@ -104,6 +125,10 @@ public final class TrackedHand {
                 pinchSince = t
                 pinchBegan = true
                 releaseFrames = 0
+                pinchDeliberate = t - lastWideOpen <= config.pinchArmWindow
+                pinchOKSign = pose.extended[1...3].filter { $0 }.count >= 2
+            } else if pose.pinchIndex > config.pinchArmOpen {
+                lastWideOpen = t
             }
         } else {
             releaseFrames = pose.pinchIndex > config.pinchOpen ? releaseFrames + 1 : 0
@@ -113,8 +138,17 @@ public final class TrackedHand {
             }
         }
 
-        history.append(Sample(anchor: anchor, scale: scale, shape: shape), at: t)
+        tipFilter.minCutoff = config.filterMinCutoff
+        tipFilter.beta = config.filterBeta
+        if bridged { tipFilter.reset() }
+        let fp = tipFilter.filter(TrackedHand.flickPoint(pose, config: config) * 1000, time: t) / 1000
+        history.append(Sample(anchor: anchor, flickPoint: fp, scale: scale, shape: shape), at: t)
         pinchHistory.append(pose.pinchIndex, at: t)
+    }
+
+    /// True if the hand was above `line` (frame fraction) at any point in the last `window` seconds.
+    public func wasAbove(_ line: Double, within window: Double, at t: Double) -> Bool {
+        anchor.y < line || history.since(t - window).contains { $0.value.anchor.y < line }
     }
 
     func markMissing() {

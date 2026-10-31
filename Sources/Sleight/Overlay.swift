@@ -59,8 +59,8 @@ final class Overlay {
         if let f = flash {
             chip = f.chip
         } else if !hud.active {
-            // Resting: say so only while a hand is up (or a first clap was heard).
-            if hud.cue == .clap { chip = Chip.cue(.clap, progress: 0) }
+            // Resting: say so only while a hand is up (or the wake gesture is forming).
+            if let cue = hud.cue, cue == .clap || cue == .handsUp { chip = Chip.cue(cue, progress: hud.progress, active: false) }
             else if hud.handsVisible > 0, showHints { chip = Chip.resting }
         } else if hud.mode == .pointer {
             chip = Chip.pointer(progress: hud.progress)
@@ -94,8 +94,10 @@ struct Chip: Equatable {
     var progress: Double = 0
     var accent = false
 
-    static func cue(_ cue: HUDState.Cue, progress: Double) -> Chip {
+    static func cue(_ cue: HUDState.Cue, progress: Double, active: Bool = true) -> Chip {
         switch cue {
+        case .handsUp: return Chip(symbol: "hand.raised", title: active ? "Hold to rest" : "Hold to wake",
+                                   detail: nil, progress: progress)
         case .swipe: return Chip(symbol: "hand.raised", title: "Swipe", detail: "← →  desktops    ↑  Mission Control")
         case .scroll: return Chip(symbol: "arrow.up.and.down", title: "Flick to scroll", detail: "↑ ↓  scroll    ← →  back · forward")
         case .media: return Chip(symbol: "playpause", title: "Media", detail: "let go  play/pause    ↕ volume    ↔ track")
@@ -109,7 +111,7 @@ struct Chip: Equatable {
         }
     }
 
-    static let resting = Chip(symbol: "moon", title: "Sleight is resting", detail: "👏👏 clap twice to wake")
+    static let resting = Chip(symbol: "moon", title: "Sleight is resting", detail: "raise both hands and hold to wake")
 
     static func pointer(progress: Double) -> Chip {
         Chip(symbol: "cursorarrow", title: "Pointer",
@@ -161,7 +163,7 @@ struct Chip: Equatable {
             if reason == .resting { return nil }
             return m == .pointer ? c("cursorarrow", "Pointer mode") : c("hand.raised", "Gestures")
         case .activeChanged(let on):
-            return on ? c("sparkle", "Sleight is listening") : Chip(symbol: "moon", title: "Resting", detail: "👏👏 to wake", accent: true)
+            return on ? c("sparkle", "Sleight is listening") : Chip(symbol: "moon", title: "Resting", detail: "both hands up to wake", accent: true)
         default:
             return nil
         }

@@ -4,8 +4,9 @@ import Foundation
 /// to command or pointer mode, and steps aside whenever the user touches a real
 /// keyboard or trackpad.
 ///
-/// Resting: the camera keeps watching, but only a double clap (👏👏) is heard,
-/// which makes Sleight active again. A double clap while active rests it.
+/// Resting: the camera keeps watching, but only the wake gesture is seen: both
+/// open hands raised and held still for a second (or a double clap, if enabled).
+/// The same gesture while active rests it.
 public final class SleightEngine {
     public var config: SleightConfig {
         didSet { command.config = config; pointer.config = config; twoHands.config = config }
@@ -50,13 +51,16 @@ public final class SleightEngine {
         }
 
         let two = twoHands.step(tracks: tracks, time: t)
-        if two.events.contains(.doubleClap) {
+        if two.events.contains(.doubleClap) || two.events.contains(.handsUp) {
             actions += setActive(!active, time: t)
         }
 
         guard active else {
             hud.active = false
-            hud.cue = two.cue == .clap ? .clap : nil
+            if two.cue == .clap || two.cue == .handsUp {
+                hud.cue = two.cue
+                hud.progress = two.progress
+            }
             return EngineOutput(actions: actions, hud: hud, pose: pose)
         }
 
@@ -64,7 +68,7 @@ public final class SleightEngine {
             switch e {
             case .curtains: actions.append(.shortcut(.showDesktop))
             case .frame: actions.append(.shortcut(.screenshot))
-            case .clap, .doubleClap: break
+            case .clap, .doubleClap, .handsUp: break
             }
         }
         // A forming two-hand gesture outranks anything one hand might be doing.

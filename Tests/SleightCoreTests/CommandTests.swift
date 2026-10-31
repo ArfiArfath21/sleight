@@ -80,6 +80,29 @@ final class ScrollFlickTests: XCTestCase {
     }
 }
 
+final class FlickDownTests: XCTestCase {
+    /// On a laptop camera hands sit low in the frame; a flick down carries them
+    /// into the ignored bottom zone mid-flick.
+    func testFlickDownFromLowInTheFrameStillScrolls() {
+        let sim = Sim()
+        var v = SyntheticHand.vee(at: Vec2(0.65, 0.9))
+        sim.hold(v, for: 0.3)
+        sim.move(&v, by: Vec2(0, 0.18), over: 0.15)
+        sim.hold(v, for: 0.2)
+        XCTAssertEqual(sim.flicks.count, 1)
+        XCTAssertGreaterThan(sim.flicks.first?.y ?? 0, 0)
+    }
+
+    func testGentleFlickCounts() {
+        let sim = Sim()
+        var v = SyntheticHand.vee(at: Vec2(0.65, 0.6))
+        sim.hold(v, for: 0.3)
+        sim.move(&v, by: Vec2(0, 0.1), over: 0.2)   // ~3 hand/s, a relaxed flick
+        sim.hold(v, for: 0.2)
+        XCTAssertEqual(sim.flicks.count, 1)
+    }
+}
+
 final class SwipeTests: XCTestCase {
     func testOpenHandSwipes() {
         for (delta, expected) in [(Vec2(0.25, 0), Shortcut.spaceLeft),
@@ -158,14 +181,16 @@ final class MediaRemoteTests: XCTestCase {
         var h = SyntheticHand.relaxed(at: Vec2(0.65, 0.75))
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
-        sim.move(&h, by: Vec2(0, -0.15), over: 0.5)
+        sim.hold(h, for: 0.35)
+        sim.move(&h, by: Vec2(0, -0.2), over: 0.6)
         sim.unpinch(&h)
         XCTAssertGreaterThanOrEqual(sim.media.filter { $0 == .volumeUp }.count, 3)
         XCTAssertFalse(sim.media.contains(.playPause))
         sim.clear()
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
-        sim.move(&h, by: Vec2(0, 0.1), over: 0.4)
+        sim.hold(h, for: 0.35)
+        sim.move(&h, by: Vec2(0, 0.15), over: 0.5)
         sim.unpinch(&h)
         XCTAssertTrue(sim.media.allSatisfy { $0 == .volumeDown })
         XCTAssertGreaterThanOrEqual(sim.media.count, 2)
@@ -176,16 +201,56 @@ final class MediaRemoteTests: XCTestCase {
         var h = SyntheticHand.relaxed(at: Vec2(0.45, 0.65))
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
+        sim.hold(h, for: 0.35)
         sim.move(&h, by: Vec2(0.25, 0), over: 0.4)
         sim.unpinch(&h)
         XCTAssertEqual(sim.media, [.next])
         sim.clear()
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
+        sim.hold(h, for: 0.35)
         sim.move(&h, by: Vec2(-0.25, 0), over: 0.4)
         sim.unpinch(&h)
         XCTAssertEqual(sim.media, [.previous])
         XCTAssertTrue(sim.switcher.isEmpty, "media and apps are separate families")
+    }
+}
+
+final class AccidentalMediaTests: XCTestCase {
+    /// A hand that looks pinched from the start (thumb resting on the index) and
+    /// wanders around: the most common false trigger on real hands.
+    func testHandThatJustLooksPinchedNeverTriggersMedia() {
+        let sim = Sim()
+        var h = SyntheticHand.relaxed(at: Vec2(0.6, 0.6))
+        h.pinch = 1
+        h.fingers[0] = 0.6
+        sim.hold(h, for: 0.5)
+        sim.move(&h, by: Vec2(0, -0.15), over: 0.5)
+        sim.move(&h, by: Vec2(0.2, 0.1), over: 0.5)
+        sim.hold(h, for: 0.5)
+        XCTAssertTrue(sim.media.isEmpty, "\(sim.media)")
+    }
+
+    func testCurledHandPinchIsNotTheRemote() {
+        let sim = Sim()
+        var h = SyntheticHand.relaxed(at: Vec2(0.6, 0.6))
+        h.fingers = [1, 0.1, 0.1, 0.1]   // other fingers folded: not an OK sign
+        sim.hold(h, for: 0.4)
+        sim.move(&h, by: .zero, over: 0.1) { hand, f in hand.pinch = f; hand.fingers[0] = lerp(1, 0.6, f) }
+        sim.move(&h, by: .zero, over: 0.1) { hand, f in hand.pinch = 1 - f; hand.fingers[0] = lerp(0.6, 1, f) }
+        XCTAssertTrue(sim.media.isEmpty)
+    }
+
+    func testPinchWhileMovingIsIgnored() {
+        let sim = Sim()
+        var h = SyntheticHand.relaxed(at: Vec2(0.5, 0.7))
+        sim.hold(h, for: 0.4)
+        sim.move(&h, by: Vec2(0, -0.2), over: 0.4) { hand, f in
+            hand.pinch = min(f * 3, 1); hand.fingers[0] = lerp(1, 0.6, min(f * 3, 1))
+        }
+        sim.hold(h, for: 0.3)
+        sim.unpinch(&h)
+        XCTAssertTrue(sim.media.isEmpty, "\(sim.media)")
     }
 }
 
@@ -315,8 +380,15 @@ final class ClapTests: XCTestCase {
         return (l, SyntheticHand.openPalm(at: Vec2(0.97, 0.65)))
     }
 
+    func clapSim() -> Sim {
+        var c = SleightConfig()
+        c.clapEnabled = true
+        c.handsUpEnabled = false
+        return Sim(config: c)
+    }
+
     func testDoubleClapRestsAndWakes() {
-        let sim = Sim()
+        let sim = clapSim()
         var (l, r) = hands()
         sim.hold([l, r], for: 0.3)
         clap(sim, &l, &r)
@@ -332,7 +404,7 @@ final class ClapTests: XCTestCase {
     }
 
     func testClapWhereTrackerMergesTheHandsStillCounts() {
-        let sim = Sim()
+        let sim = clapSim()
         var (l, r) = hands()
         sim.hold([l, r], for: 0.3)
         clap(sim, &l, &r, merge: true)
@@ -341,7 +413,7 @@ final class ClapTests: XCTestCase {
     }
 
     func testSlowlyBringingHandsTogetherIsNotAClap() {
-        let sim = Sim()
+        let sim = clapSim()
         var (l, r) = hands()
         sim.hold([l, r], for: 0.3)
         for _ in 0..<3 {
@@ -353,7 +425,7 @@ final class ClapTests: XCTestCase {
     }
 
     func testClapsTooFarApartInTimeDoNothing() {
-        let sim = Sim()
+        let sim = clapSim()
         var (l, r) = hands()
         sim.hold([l, r], for: 0.3)
         clap(sim, &l, &r)
@@ -381,6 +453,47 @@ final class ClapTests: XCTestCase {
         _ = sim.enterPointer()
         _ = sim.engine.setActive(false, time: sim.time)
         XCTAssertEqual(sim.mode, .command)
+    }
+}
+
+final class HandsUpTests: XCTestCase {
+    func raised() -> [SyntheticHand] {
+        var l = SyntheticHand.openPalm(at: Vec2(0.35, 0.6))
+        l.chirality = .left
+        return [l, SyntheticHand.openPalm(at: Vec2(1.0, 0.6))]
+    }
+
+    func testRaisingBothHandsAndHoldingRestsThenWakes() {
+        let sim = Sim()
+        sim.hold(raised(), for: 0.6)
+        XCTAssertEqual(sim.lastHUD.cue, .handsUp)
+        XCTAssertGreaterThan(sim.lastHUD.progress, 0.2)
+        XCTAssertTrue(sim.engine.active)
+        sim.hold(raised(), for: 0.7)
+        XCTAssertFalse(sim.engine.active)
+        sim.hold(raised(), for: 2.0)
+        XCTAssertFalse(sim.engine.active, "keeping the hands up must not flip it back")
+        sim.empty(for: 0.5)
+        sim.hold(raised(), for: 1.4)
+        XCTAssertTrue(sim.engine.active)
+        XCTAssertTrue(sim.shortcuts.isEmpty, "two still open hands must not swipe")
+    }
+
+    func testDroppingHandsEarlyCancels() {
+        let sim = Sim()
+        sim.hold(raised(), for: 0.6)
+        sim.empty(for: 0.3)
+        sim.hold(raised(), for: 0.6)
+        XCTAssertTrue(sim.engine.active)
+    }
+
+    func testHandsUpWakesFromRest() {
+        let sim = Sim()
+        _ = sim.engine.setActive(false, time: sim.time)
+        sim.hold(raised(), for: 0.5)
+        XCTAssertEqual(sim.lastHUD.cue, .handsUp)
+        sim.hold(raised(), for: 0.8)
+        XCTAssertTrue(sim.engine.active)
     }
 }
 

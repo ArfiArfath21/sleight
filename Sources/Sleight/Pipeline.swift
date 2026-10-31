@@ -96,13 +96,20 @@ final class Pipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         return dir
     }
 
+    /// Records until `stopRecording()` (the Practice window records while open).
+    func startRecording(prefix: String) -> URL { record(seconds: 3600, prefix: prefix) }
+
+    func stopRecording() {
+        captureQueue.async { [self] in recordUntil = 0 }
+    }
+
     /// Records raw hand frames as JSON lines for `seconds`; returns the file URL.
-    func record(seconds: Double) -> URL {
+    func record(seconds: Double, prefix: String = "") -> URL {
         let dir = Pipeline.supportDirectory.appendingPathComponent("recordings", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let f = DateFormatter()
         f.dateFormat = "yyyy-MM-dd_HH-mm-ss"
-        let url = dir.appendingPathComponent("\(f.string(from: Date())).jsonl")
+        let url = dir.appendingPathComponent("\(prefix)\(f.string(from: Date())).jsonl")
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try? FileHandle(forWritingTo: url)
         captureQueue.async { [self] in

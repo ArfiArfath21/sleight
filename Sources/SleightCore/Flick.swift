@@ -45,7 +45,7 @@ public struct FlickDetector: Sendable {
         let inShape = samples.filter { $0.value.shape == shape }.count
         guard Double(inShape) / Double(samples.count) >= 0.75 else { return nil }
 
-        let d = (lastS.value.anchor - first.value.anchor) / lastS.value.scale
+        let d = (lastS.value.flickPoint - first.value.flickPoint) / lastS.value.scale
         let v = d / span
         // Peak speed along an axis (mean of the two fastest steps): a flick that
         // is detected early, mid-motion, still reports how hard it was.
@@ -53,7 +53,7 @@ public struct FlickDetector: Sendable {
             var steps: [Double] = []
             for i in 1..<samples.count {
                 let dt = max(samples[i].time - samples[i - 1].time, 1e-3)
-                steps.append(abs(axis(samples[i].value.anchor - samples[i - 1].value.anchor)) / samples[i].value.scale / dt)
+                steps.append(abs(axis(samples[i].value.flickPoint - samples[i - 1].value.flickPoint)) / samples[i].value.scale / dt)
             }
             let top = steps.sorted(by: >).prefix(2)
             return top.reduce(0, +) / Double(max(top.count, 1))

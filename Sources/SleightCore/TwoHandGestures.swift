@@ -16,7 +16,7 @@ public final class TwoHandGestures {
     public var config: SleightConfig
 
     public enum Event: Equatable, Sendable {
-        case clap, doubleClap, curtains, frame
+        case clap, doubleClap, curtains, frame, handsUp
     }
 
     public struct Result {
@@ -36,6 +36,9 @@ public final class TwoHandGestures {
     private var togetherSince: Double?
     private var togetherDistance: Double = 0
     private var frameSince: Double?
+    private var handsUpSince: Double?
+    /// After a hands-up fires, both hands must come down before it can fire again.
+    private var handsUpLatched = false
     private var quietUntil = -Double.infinity
 
     public init(config: SleightConfig = .default) { self.config = config }
@@ -46,6 +49,7 @@ public final class TwoHandGestures {
         contactLatched = false
         togetherSince = nil
         frameSince = nil
+        handsUpSince = nil
     }
 
     public func step(tracks: HandTracks, time t: Double) -> Result {
@@ -59,6 +63,7 @@ public final class TwoHandGestures {
             lastPairDistance = d
 
             detectClap(distance: d, time: t, result: &r)
+            detectHandsUp(a, b, distance: d, time: t, result: &r)
             if t >= quietUntil {
                 detectCurtains(a, b, distance: d, time: t, result: &r)
                 detectFrame(a, b, time: t, result: &r)
@@ -76,6 +81,8 @@ public final class TwoHandGestures {
             contactLatched = false
             togetherSince = nil
             frameSince = nil
+            handsUpSince = nil
+            handsUpLatched = false
         }
 
         if let c = lastClap, t - c < config.doubleClapMax, r.events.isEmpty || r.events == [.clap] {
@@ -115,6 +122,33 @@ public final class TwoHandGestures {
         } else {
             r.events.append(.clap)
             lastClap = t
+        }
+    }
+
+    // MARK: Hands up (rest / wake)
+
+    /// Both open hands raised, palms to the screen, apart, held still.
+    private func detectHandsUp(_ a: TrackedHand, _ b: TrackedHand, distance d: Double, time t: Double,
+                               result r: inout Result) {
+        guard config.handsUpEnabled else { return }
+        let open = a.shape(heldFor: config.settleTime, at: t) == .open && b.shape(heldFor: config.settleTime, at: t) == .open
+        let level = abs(a.anchor.y - b.anchor.y) / ((a.scale + b.scale) / 2) < config.handsUpMaxTilt
+        let still = a.speed < config.handsUpMaxSpeed && b.speed < config.handsUpMaxSpeed
+        guard open, level, still, d >= config.handsUpMinApart else {
+            handsUpSince = nil
+            if !open { handsUpLatched = false }
+            return
+        }
+        guard !handsUpLatched else { return }
+        let since = handsUpSince ?? t
+        handsUpSince = since
+        r.busy = true
+        r.cue = .handsUp
+        r.progress = clamp((t - since) / config.handsUpHold, 0, 1)
+        if t - since >= config.handsUpHold {
+            r.events.append(.handsUp)
+            handsUpSince = nil
+            handsUpLatched = true
         }
     }
 

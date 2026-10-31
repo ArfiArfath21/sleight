@@ -56,6 +56,22 @@ enum Snapshots {
             try? png.write(to: dir.appendingPathComponent("guide.png"))
         }
 
+        let model = PracticeModel()
+        model.seeing = "1 hand  ·  peace sign ✌️  ·  ready: Flick to scroll"
+        model.counts = ["flickUp": 3, "swipeSide": 1, "tap": 2]
+        model.lastHit = "flickUp"
+        model.lastHitAt = Date()
+        let pr = ImageRenderer(content: PracticeList(model: model)
+            .padding(20)
+            .frame(width: 600)
+            .background(Color(red: 0.11, green: 0.11, blue: 0.13))
+            .environment(\.colorScheme, .dark))
+        pr.scale = 1
+        if let img = pr.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: dir.appendingPathComponent("practice.png"))
+        }
+
         if let png = Brand.iconPNG(pixels: 1024) { try? png.write(to: dir.appendingPathComponent("logo.png")) }
 
         // The wordmark: mark + name, for the README header.

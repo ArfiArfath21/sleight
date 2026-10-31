@@ -61,9 +61,11 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var swipeAxisDominance: Double = 1.6
 
     // MARK: Command mode: two-finger flicks (scroll, back/forward)
-    public var flickMinSpeed: Double = 2.6
-    public var flickMinDistance: Double = 0.5
-    public var flickWindow: Double = 0.18
+    /// Flicks are measured this far from the palm toward the fingertips (0…1).
+    public var flickTipWeight: Double = 0.6
+    public var flickMinSpeed: Double = 2.0
+    public var flickMinDistance: Double = 0.38
+    public var flickWindow: Double = 0.22
     /// Scroll velocity (pt/s) per unit of flick speed (hs/s).
     public var scrollFlickGain: Double = 420
     public var scrollFlickMin: Double = 900
@@ -74,14 +76,26 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     /// After a flick, the same direction can fire again after this long...
     public var flickRepeatGap: Double = 0.22
     /// ...and the opposite direction (the return stroke) after this long.
-    public var flickReturnGap: Double = 0.6
+    public var flickReturnGap: Double = 0.45
 
-    // MARK: Command mode: pinch = media remote
+    // MARK: Command mode: pinch = media remote (👌)
+    /// A media pinch must close from fingers clearly apart (above this, hs)…
+    public var pinchArmOpen: Double = 0.5
+    /// …within this long before closing. Hands that merely look pinched never qualify.
+    public var pinchArmWindow: Double = 0.8
+    /// The other three fingers must be up (an OK sign), which a relaxed or
+    /// curled hand never is.
+    public var mediaNeedsOKSign: Bool = true
+    /// Hold the pinch still this long before sliding does anything.
+    public var mediaHold: Double = 0.3
+    /// Moving further than this (hs) before `mediaHold` cancels: a moving hand
+    /// that happened to pinch is not using the remote.
     /// Pinch released within this time without sliding = play/pause.
+    public var mediaEarlyMoveCancel: Double = 0.35
     public var pinchTapMax: Double = 0.45
     /// Slide this far (hs) to choose: vertical = volume, sideways = next/previous track.
-    public var pinchAxisLock: Double = 0.3
-    public var volumeStep: Double = 0.2
+    public var pinchAxisLock: Double = 0.4
+    public var volumeStep: Double = 0.22
     public var trackSkipEnabled: Bool = true
 
     // MARK: Command mode: fist = grab the app switcher
@@ -95,8 +109,16 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var pointMaxSpeed: Double = 1.0
 
     // MARK: Two hands
-    /// Double clap toggles active / resting.
-    public var clapEnabled: Bool = true
+    /// Both open hands raised and held still toggles active / resting.
+    public var handsUpEnabled: Bool = true
+    public var handsUpHold: Double = 1.0
+    /// Hands at least this far apart (hs): clearly two raised hands, not curtains.
+    public var handsUpMinApart: Double = 2.8
+    public var handsUpMaxTilt: Double = 1.5
+    public var handsUpMaxSpeed: Double = 0.9
+    /// Double clap also toggles active / resting. Off by default: hands hide each
+    /// other at the moment of a clap, so the camera alone misses many.
+    public var clapEnabled: Bool = false
     /// Hands must close faster than this (hs/s) for a clap...
     public var clapApproachSpeed: Double = 5.0
     /// ...and meet (palms closer than this, hs) or merge into one detection.
