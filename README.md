@@ -3,6 +3,13 @@
 <p align="center"><b>Gestures that land.</b><br>
 Camera hand gestures for macOS: a handful of easy gestures, both hands, no aiming.</p>
 
+<p align="center">
+  <a href="https://github.com/ArfiArfath21/sleight/releases/latest"><img src="https://img.shields.io/github/v/release/ArfiArfath21/sleight?color=f7f2e6&labelColor=08080d" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-15%2B-f7f2e6?labelColor=08080d" alt="macOS 15+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-f7f2e6?labelColor=08080d" alt="MIT license"></a>
+  <a href="https://ko-fi.com/arfiarfath21"><img src="https://img.shields.io/badge/support-Ko--fi-f7f2e6?labelColor=08080d&logo=kofi&logoColor=f7f2e6" alt="Support on Ko-fi"></a>
+</p>
+
 ---
 
 Sleight watches your hands through the Mac's camera and turns a few natural motions
@@ -112,13 +119,34 @@ highlight on hover.
 | `⌃⌥P` | Pointer mode on / off |
 | `⌃⌥K` | On-screen keyboard |
 
-## Install / build
+## Install
+
+### 1. Homebrew (recommended)
+
+```bash
+brew install arfiarfath21/tap/sleight
+```
+
+Update with `brew upgrade sleight`, remove with `brew uninstall --cask sleight`.
+
+### 2. One-line installer
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ArfiArfath21/sleight/main/install.sh | bash
+```
+
+### 3. Download
+
+Grab `Sleight.dmg` from the [latest release](https://github.com/ArfiArfath21/sleight/releases/latest)
+and drag Sleight to Applications.
+
+### 4. Build from source
 
 Requires macOS 15+, Xcode (Swift 6), Apple silicon.
 
 ```bash
 ./scripts/build-app.sh          # builds, renders the icon, signs, installs ~/Applications/Sleight.app
-open ~/Applications/Sleight.app
+./scripts/package-dmg.sh        # build/Sleight.dmg for releases
 ```
 
 The first launch asks for **Camera** and **Accessibility** (to post scroll, key and
@@ -205,3 +233,15 @@ point where the motion lands: the moment a gesture becomes an action. Ivory and 
 ink. When Sleight turns on, the stroke sweeps around the ring and lands on the point.
 
 See [ROADMAP.md](ROADMAP.md).
+
+## Support
+
+If Sleight is useful to you, you can buy me a coffee:
+
+<p align="center">
+  <a href="https://ko-fi.com/arfiarfath21"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi"></a>
+</p>
+
+## License
+
+[MIT](LICENSE) © 2026 Arfath Ahmed Syed

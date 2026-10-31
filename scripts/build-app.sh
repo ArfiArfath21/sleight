@@ -6,7 +6,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 CONFIG="${CONFIG:-release}"
-APP_DIR="$HOME/Applications/Sleight.app"
+APP_DIR="${APP_DIR:-$HOME/Applications/Sleight.app}"
 IDENTITY="${SLEIGHT_SIGN_IDENTITY:-$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/ {print $2; exit}')}"
 
 swift build -c "$CONFIG" --product Sleight
