@@ -124,6 +124,7 @@ highlight on hover.
 ### 1. Homebrew (recommended)
 
 ```bash
+brew trust arfiarfath21/tap        # once: recent Homebrew only loads casks from trusted taps
 brew install arfiarfath21/tap/sleight
 ```
 
