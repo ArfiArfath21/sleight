@@ -114,7 +114,8 @@ public final class GestureEngine {
             if phase == .engaged { disengage(.userInput, &actions) }
             phase = .idle
             lastSeen = nil
-            hud.mode = input.hands.isEmpty ? .off : .watching
+            // Hands on the keyboard are in view: show nothing at all.
+            hud.mode = .off
             hud.cursor = input.systemCursor
             return EngineOutput(actions: actions, hud: hud, pose: nil)
         }

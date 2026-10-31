@@ -52,6 +52,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             runHeadlessBenchmark(seconds: seconds)
             return
         }
+        if let dir = launchOptions.snapshotDir {
+            Snapshots.render(to: URL(fileURLWithPath: dir, isDirectory: true), injector: pipeline.injector,
+                             monitor: pipeline.inputMonitor, store: store)
+            NSApp.terminate(nil)
+            return
+        }
         if let seconds = launchOptions.recordSeconds {
             pipeline.dryRun = true
             overlay.enabled = false
@@ -341,6 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 struct LaunchOptions {
     var benchmarkSeconds: Double?
     var recordSeconds: Double?
+    var snapshotDir: String?
     var selfTest = false
 
     init(arguments: [String]) {
@@ -350,6 +357,7 @@ struct LaunchOptions {
             case "--bench": benchmarkSeconds = it.next().flatMap(Double.init) ?? 10
             case "--record": recordSeconds = it.next().flatMap(Double.init) ?? 10
             case "--selftest": selfTest = true
+            case "--snapshots": snapshotDir = it.next()
             default: break
             }
         }
