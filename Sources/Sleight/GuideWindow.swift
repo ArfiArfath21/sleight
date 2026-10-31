@@ -1,10 +1,11 @@
 import SwiftUI
 import AppKit
 import SleightBrand
+import SleightCore
 
 enum GuideWindow {
-    static func make(onPractice: (() -> Void)? = nil) -> NSWindow {
-        let host = NSHostingController(rootView: GuideView(onPractice: onPractice))
+    static func make(map: GestureMap, onPractice: (() -> Void)? = nil) -> NSWindow {
+        let host = NSHostingController(rootView: GuideView(onPractice: onPractice, map: map))
         let w = NSWindow(contentViewController: host)
         w.title = "Sleight"
         w.styleMask = [.titled, .closable, .fullSizeContentView]
@@ -16,6 +17,7 @@ enum GuideWindow {
 
 struct GuideView: View {
     var onPractice: (() -> Void)?
+    var map = GestureMap()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -40,8 +42,10 @@ struct GuideView: View {
                                 VStack(alignment: .leading, spacing: 3) {
                                     HStack {
                                         Text(g.title).font(.headline)
+                                        if g.gesture == nil { Text("built in").font(.caption).foregroundStyle(.secondary) }
                                         Spacer()
-                                        Text(g.effect).font(.headline).foregroundStyle(Color(cgColor: Brand.gold))
+                                        Text(g.effect(map)).font(.headline)
+                                            .foregroundStyle(g.effect(map) == "Nothing" ? Color.secondary : Color(cgColor: Brand.gold))
                                     }
                                     Text(g.how).font(.callout).foregroundStyle(.secondary)
                                         .fixedSize(horizontal: false, vertical: true)
@@ -52,7 +56,7 @@ struct GuideView: View {
                 }
             }
             Divider()
-            Text("Gestures are about the motion, not where your hand is, but your hand has to be in the camera's view: chest to face height works best. Typing or touching the trackpad pauses everything for a second.")
+            Text("Change what any gesture does in Settings. Gestures set to Nothing aren't even looked for, so they never get in the way. Your hand has to be in the camera's view: chest to face height works best. Typing or touching the trackpad pauses everything for a second.")
                 .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Text("⌃⌥S rest / wake · ⌃⌥P pointer mode · ⌃⌥K keyboard")
                 .font(.footnote.monospaced()).foregroundStyle(.secondary)

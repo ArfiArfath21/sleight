@@ -129,15 +129,33 @@ final class EventInjector {
     private static let arrowFlags: CGEventFlags = [.maskSecondaryFn, .maskNumericPad]
 
     func shortcut(_ s: Shortcut) {
+        let arrows = Self.arrowFlags
         switch s {
         case .back: key(KeyCode.leftBracket, flags: .maskCommand)
         case .forward: key(KeyCode.rightBracket, flags: .maskCommand)
-        case .spaceLeft: key(KeyCode.left, flags: Self.arrowFlags.union(.maskControl))
-        case .spaceRight: key(KeyCode.right, flags: Self.arrowFlags.union(.maskControl))
-        case .missionControl: key(KeyCode.up, flags: Self.arrowFlags.union(.maskControl))
-        case .appExpose: key(KeyCode.down, flags: Self.arrowFlags.union(.maskControl))
+        case .nextTab: key(KeyCode.tab, flags: .maskControl)
+        case .previousTab: key(KeyCode.tab, flags: [.maskControl, .maskShift])
+        case .newTab: key(KeyCode.t, flags: .maskCommand)
+        case .reopenTab: key(KeyCode.t, flags: [.maskCommand, .maskShift])
+        case .spaceLeft: key(KeyCode.left, flags: arrows.union(.maskControl))
+        case .spaceRight: key(KeyCode.right, flags: arrows.union(.maskControl))
+        case .missionControl: key(KeyCode.up, flags: arrows.union(.maskControl))
+        case .appExpose: key(KeyCode.down, flags: arrows.union(.maskControl))
         case .showDesktop: key(KeyCode.f11, flags: .maskSecondaryFn)
+        case .hideApp: key(KeyCode.h, flags: .maskCommand)
+        case .minimize: key(KeyCode.m, flags: .maskCommand)
+        case .fullScreen: key(KeyCode.f, flags: [.maskCommand, .maskControl])
+        case .zoomIn: key(KeyCode.equal, flags: .maskCommand)
+        case .zoomOut: key(KeyCode.minus, flags: .maskCommand)
+        case .arrowLeft: key(KeyCode.left, flags: arrows)
+        case .arrowRight: key(KeyCode.right, flags: arrows)
+        case .arrowUp: key(KeyCode.up, flags: arrows)
+        case .arrowDown: key(KeyCode.down, flags: arrows)
         case .screenshot: key(KeyCode.three, flags: [.maskCommand, .maskShift])
+        case .screenshotSelection: key(KeyCode.four, flags: [.maskCommand, .maskShift])
+        case .screenshotTool: key(KeyCode.five, flags: [.maskCommand, .maskShift])
+        case .spotlight: key(KeyCode.space, flags: .maskCommand)
+        case .lockScreen: key(KeyCode.q, flags: [.maskCommand, .maskControl])
         }
     }
 
@@ -167,6 +185,9 @@ final class EventInjector {
         case .playPause: code = 16     // NX_KEYTYPE_PLAY
         case .next: code = 17          // NX_KEYTYPE_NEXT
         case .previous: code = 18      // NX_KEYTYPE_PREVIOUS
+        case .mute: code = 7           // NX_KEYTYPE_MUTE
+        case .brightnessUp: code = 2   // NX_KEYTYPE_BRIGHTNESS_UP
+        case .brightnessDown: code = 3 // NX_KEYTYPE_BRIGHTNESS_DOWN
         }
         for down in [true, false] {
             let state = down ? 0xA : 0xB
@@ -201,4 +222,11 @@ enum KeyCode {
     static let forwardDelete: CGKeyCode = 117
     static let f11: CGKeyCode = 103
     static let three: CGKeyCode = 20
+    static let four: CGKeyCode = 21
+    static let five: CGKeyCode = 23
+    static let t: CGKeyCode = 17
+    static let h: CGKeyCode = 4
+    static let m: CGKeyCode = 46
+    static let f: CGKeyCode = 3
+    static let q: CGKeyCode = 12
 }

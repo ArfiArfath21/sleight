@@ -15,6 +15,7 @@ final class Overlay {
     private var displayLink: CADisplayLink?
     var showStats = false
     var showHints = true
+    var gestures = GestureMap()
     var enabled = true { didSet { if !enabled { windows.forEach { $0.view.hideAll() } } } }
     private var flash: (chip: Chip, until: Double)?
 
@@ -60,12 +61,14 @@ final class Overlay {
             chip = f.chip
         } else if !hud.active {
             // Resting: say so only while a hand is up (or the wake gesture is forming).
-            if let cue = hud.cue, cue == .clap || cue == .handsUp { chip = Chip.cue(cue, progress: hud.progress, active: false) }
+            if let cue = hud.cue, cue == .clap || cue == .handsUp {
+                chip = Chip.cue(cue, progress: hud.progress, active: false, map: gestures)
+            }
             else if hud.handsVisible > 0, showHints { chip = Chip.resting }
         } else if hud.mode == .pointer {
             chip = Chip.pointer(progress: hud.progress)
         } else if showHints, let cue = hud.cue {
-            chip = Chip.cue(cue, progress: hud.progress)
+            chip = Chip.cue(cue, progress: hud.progress, map: gestures)
         }
         if chip == nil, let w = hud.warning, hud.handsVisible > 0 || hud.mode == .pointer {
             chip = Chip.warning(w)
@@ -94,20 +97,49 @@ struct Chip: Equatable {
     var progress: Double = 0
     var accent = false
 
-    static func cue(_ cue: HUDState.Cue, progress: Double, active: Bool = true) -> Chip {
+    /// Hint for what the hands in view are ready for, listing what the user
+    /// assigned. nil when nothing in that family is assigned.
+    static func cue(_ cue: HUDState.Cue, progress: Double, active: Bool = true, map: GestureMap = GestureMap()) -> Chip? {
+        func list(_ items: [(String, GestureID)]) -> String? {
+            let parts = items.filter { map.isAssigned($0.1) }.map { "\($0.0) \(map[$0.1].title.lowercased())" }
+            return parts.isEmpty ? nil : parts.joined(separator: "   ")
+        }
         switch cue {
-        case .handsUp: return Chip(symbol: "hand.raised", title: active ? "Hold to rest" : "Hold to wake",
-                                   detail: nil, progress: progress)
-        case .swipe: return Chip(symbol: "hand.raised", title: "Swipe", detail: "← →  desktops    ↑  Mission Control")
-        case .scroll: return Chip(symbol: "arrow.up.and.down", title: "Flick to scroll", detail: "↑ ↓  scroll    ← →  back · forward")
-        case .media: return Chip(symbol: "playpause", title: "Media", detail: "let go  play/pause    ↕ volume    ↔ track")
-        case .volume: return Chip(symbol: "speaker.wave.2", title: "Volume", detail: "slide up or down")
-        case .grab: return Chip(symbol: "hand.raised.fingers.spread", title: "Grab", detail: "slide sideways to switch apps")
-        case .apps: return Chip(symbol: "square.stack.3d.up", title: "Apps", detail: "slide to choose · open hand to switch")
-        case .point: return Chip(symbol: "cursorarrow.rays", title: "Hold to point", detail: nil, progress: progress)
-        case .curtains: return Chip(symbol: "rectangle.portrait.split.2x1", title: "Part the curtains", detail: "sweep apart for the desktop")
-        case .frame: return Chip(symbol: "camera.viewfinder", title: "Hold the frame", detail: nil, progress: progress)
-        case .clap: return Chip(symbol: "hands.clap", title: "Clap again", detail: "to rest / wake Sleight")
+        case .handsUp:
+            return Chip(symbol: "hand.raised", title: active ? "Hold to rest" : "Hold to wake", detail: nil, progress: progress)
+        case .vee:
+            guard let d = list([("↑", .veeFlickUp), ("↓", .veeFlickDown), ("←", .veeFlickLeft), ("→", .veeFlickRight)]) else { return nil }
+            return Chip(symbol: "arrow.up.and.down", title: "Flick", detail: d)
+        case .open:
+            guard let d = list([("←", .openSwipeLeft), ("→", .openSwipeRight), ("↑", .openSwipeUp), ("↓", .openSwipeDown)]) else { return nil }
+            return Chip(symbol: "hand.raised", title: "Swipe", detail: d)
+        case .ok:
+            let d = [map.isAssigned(.okTap) ? "let go  \(map[.okTap].title.lowercased())" : nil,
+                     map.isAssigned(.okSlideVertical) ? "↕ \(map[.okSlideVertical].title.lowercased())" : nil,
+                     map.isAssigned(.okSlideSideways) ? "↔ \(map[.okSlideSideways].title.lowercased())" : nil]
+                .compactMap { $0 }.joined(separator: "   ")
+            return Chip(symbol: "hand.pinch", title: "OK", detail: d.isEmpty ? nil : d)
+        case .okSlideVertical:
+            let a = map[.okSlideVertical]
+            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "slide up or down")
+        case .okSlideSideways:
+            let a = map[.okSlideSideways]
+            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "slide left or right")
+        case .fist:
+            let a = map[.fistSlideSideways]
+            return Chip(symbol: "hand.raised.fingers.spread", title: "Grab", detail: "slide sideways: \(a.title.lowercased())")
+        case .fistSliding:
+            let a = map[.fistSlideSideways]
+            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "slide to step · open hand to finish")
+        case .point:
+            return Chip(symbol: "cursorarrow.rays", title: "Hold to point", detail: nil, progress: progress)
+        case .curtains:
+            return Chip(symbol: "rectangle.portrait.split.2x1", title: "Part the curtains",
+                        detail: "sweep apart: \(map[.curtains].title.lowercased())")
+        case .frame:
+            return Chip(symbol: "camera.viewfinder", title: "Hold the frame", detail: map[.frame].title.lowercased(), progress: progress)
+        case .clap:
+            return Chip(symbol: "hands.clap", title: "Clap again", detail: map[.doubleClap].title.lowercased())
         }
     }
 
@@ -128,42 +160,23 @@ struct Chip: Equatable {
         }
     }
 
-    /// Confirmation for an action, or nil for actions that need none.
-    static func flash(for action: EngineAction) -> Chip? {
+    /// Confirmation for something that just happened, or nil.
+    static func flash(for action: EngineAction, map: GestureMap = GestureMap()) -> Chip? {
         func c(_ s: String, _ t: String) -> Chip { Chip(symbol: s, title: t, detail: nil, accent: true) }
         switch action {
-        case .scrollFlick(let v): return c(v.y < 0 ? "arrow.down" : "arrow.up", "Scroll")
-        case .shortcut(let s):
-            switch s {
-            case .back: return c("chevron.backward", "Back")
-            case .forward: return c("chevron.forward", "Forward")
-            case .spaceLeft: return c("arrow.left.square", "Desktop ←")
-            case .spaceRight: return c("arrow.right.square", "Desktop →")
-            case .missionControl: return c("rectangle.3.group", "Mission Control")
-            case .appExpose: return c("rectangle.stack", "App windows")
-            case .showDesktop: return c("macwindow.on.rectangle", "Desktop")
-            case .screenshot: return nil
-            }
-        case .media(let m):
-            switch m {
-            case .playPause: return c("playpause.fill", "Play · Pause")
-            case .volumeUp: return c("speaker.wave.3.fill", "Volume +")
-            case .volumeDown: return c("speaker.wave.1.fill", "Volume −")
-            case .next: return c("forward.fill", "Next")
-            case .previous: return c("backward.fill", "Previous")
-            }
-        case .switcher(let s):
-            switch s {
-            case .begin: return c("square.stack.3d.up", "Switching apps")
-            case .commit: return c("checkmark", "Switched")
-            case .cancel: return c("xmark", "Cancelled")
-            default: return nil
-            }
+        case .recognized(let g):
+            let a = map[g]
+            // Screenshots must not show the chip; rest/wake has its own confirmation.
+            guard a != .none, a != .restWake, a != .screenshot, a != .screenshotSelection, a != .screenshotTool else { return nil }
+            return c(GestureCatalog.symbol(a), a.title)
+        case .switcher(.commit): return c("checkmark", "Switched")
+        case .switcher(.cancel): return c("xmark", "Cancelled")
         case .modeChanged(let m, let reason):
             if reason == .resting { return nil }
             return m == .pointer ? c("cursorarrow", "Pointer mode") : c("hand.raised", "Gestures")
         case .activeChanged(let on):
-            return on ? c("sparkle", "Sleight is listening") : Chip(symbol: "moon", title: "Resting", detail: "both hands up to wake", accent: true)
+            return on ? c("sparkle", "Sleight is listening")
+                : Chip(symbol: "moon", title: "Resting", detail: "both hands up to wake", accent: true)
         default:
             return nil
         }

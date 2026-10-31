@@ -15,25 +15,46 @@ It is a native Swift menu bar app. Apple's Vision hand-pose model runs on the Ne
 Engine (~8 ms per frame), events go straight to the window server, and no frame ever
 leaves the Mac.
 
-## Gestures
+## Gestures: Sleight recognises, you decide
 
-<p align="center"><img src="docs/images/guide.png" width="520" alt="Gesture guide"></p>
+Sleight's job is **recognition**: telling a deliberate flick from a wave, an OK sign from
+a relaxed hand, a grab from a fist that's just resting. **What each gesture does is
+yours**: every gesture has a menu of ready-made actions in **Settings**.
 
-The design rules:
+<p align="center"><img src="docs/images/settings.png" width="420" alt="Gesture assignments"></p>
 
-- **Grouped by what you're doing.** Reading is ✌️ (scroll, back/forward). Windows are the
-  whole hand: ✋ swipes desktops, ✊ grabs the app switcher. Media is 👌, used like a
-  remote: tap to play/pause, hold and slide for volume or tracks. No family mixes two jobs.
-- **Trackpad muscle memory.** Two fingers scroll and go back/forward; a whole hand
-  switches desktops; content follows your hand, with natural scrolling.
-- **Flicks, not positions.** A scroll is a flick with momentum, so flick again to go
-  further. You never hold your hand at an exact spot.
-- **Nothing destructive.** No gesture closes, quits or deletes anything.
-- **Aiming is opt-in.** The pointer is a separate mode (☝️ hold), because aiming takes
-  concentration and everyday gestures shouldn't.
-- **Both hands, either hand.** Every one-hand gesture works with either hand. Both hands
-  together are kept for big, rare actions: both hands up to rest/wake, part the
-  curtains to show the desktop, frame with both hands for a screenshot.
+| Gesture | Default |
+|---|---|
+| ✌️ flick up / down | Scroll down / up (with momentum) |
+| ✌️ flick right / left | Back / Forward |
+| ✋ swipe right / left | Desktop to the left / right |
+| ✋ swipe up / down | Mission Control / Nothing |
+| 👌 tap · hold+slide ↕ · hold+slide ↔ | Nothing (pick media, tabs, zoom, arrow keys…) |
+| ✊ grab and slide sideways | App switcher |
+| 🖐🖐 part the curtains | Show desktop |
+| Frame with two L-shaped hands | Screenshot |
+| 👏👏 double clap (experimental) | Nothing |
+| **Both hands up, held** | **Rest / wake Sleight** (built in) |
+| **☝️ point and hold** | **Pointer mode** (built in) |
+| **✊ fist in pointer mode** | **Leave pointer mode** (built in) |
+
+One-shot gestures can be set to scroll, back/forward, tabs, desktops, Mission Control,
+show desktop, previous app, hide/minimize/full screen, media keys, zoom, arrow keys,
+screenshots, Spotlight, lock screen, the on-screen keyboard, or rest/wake. Slide
+gestures (✊ and 👌 hold-and-slide) step through the app switcher, volume, tabs, zoom,
+desktops, arrow keys or brightness, one step per stretch of travel.
+
+**Gestures set to Nothing aren't even looked for**, so an unused gesture can never
+misfire or get in the way of the ones you use. That's also why media isn't on by
+default: a pinch is the easiest gesture to make by accident.
+
+Design rules for the recognisers:
+
+- **Motion and shape, never position.** Raise a hand anywhere in view.
+- **Flicks, not holds.** A scroll is a flick with momentum; flick again to go further.
+- **Deliberate over easy.** A media pinch is an OK sign closed from open fingers; a swipe
+  must start from a hand already in view; a return stroke never counts.
+- **Aiming is opt-in.** The pointer is its own mode, because aiming takes concentration.
 
 ### Rest and wake
 
@@ -48,24 +69,25 @@ a clap the hands are edge-on and hide each other, so the camera alone misses man
 ### Practice
 
 **Menu → Practice Gestures…** opens a window with the live camera and your hand
-skeleton, every gesture explained in plain words, and a counter that lights up each
-time one is recognised. Nothing happens on your Mac while it's open. It also records
+skeleton, every gesture explained in plain words with what it's currently set to, and
+a counter that lights up each time one is recognised (even gestures set to Nothing).
+Nothing happens on your Mac while it's open. It also records
 hand landmarks (positions only, no video) to `recordings/practice-*.jsonl`, so
 thresholds can be tuned against real hands.
 
-### Media without false triggers
+### 👌 without false triggers
 
-The media "remote" is an **OK sign** 👌 (thumb and index tips touching, other three
-fingers up) that **closes from open fingers**: a relaxed hand that merely looks pinched
-never qualifies. Volume and track skip need the pinch held still for a beat first, and
-a pinch made while the hand is moving is ignored.
+When assigned, 👌 is an **OK sign** (thumb and index tips touching, other three fingers
+up) that **closes from open fingers**: a relaxed hand that merely looks pinched never
+qualifies. Sliding needs the pinch held still for a beat first, and a pinch made while
+the hand is moving is ignored.
 
 ### Always know what's about to happen
 
 <p align="center"><img src="docs/images/chips.png" width="420" alt="Gesture chips"></p>
 
 A small chip at the top of the screen shows what the hand in view will do *before*
-you act ("Flick to scroll", "Media: let go = play/pause, ↕ volume, ↔ track"), and
+you act, listing your own assignments ("Flick ↑ scroll down ↓ scroll up → back"), and
 flashes a confirmation when something fires. Turn the hints off in the menu once you
 know them; the confirmations stay.
 
@@ -104,7 +126,7 @@ click events). The build signs with your Apple Development certificate when ther
 one, so the grants survive rebuilds.
 
 ```bash
-swift test                      # 76 engine tests, no camera needed
+swift test                      # 85 engine tests, no camera needed
 ```
 
 | Launch flag (`open -n ~/Applications/Sleight.app --args …`) | |
@@ -163,7 +185,8 @@ Sources/
     HandPose            per-frame features and the five shapes
     HandTracks          up to two hands across frames: filtering, debounced shape and pinch
     Flick               deliberate-flick detector (settle, dominance, return-stroke lockout)
-    CommandEngine       everyday one-hand gestures
+    Mapping             gesture slots, the action list, defaults, action → OS events
+    CommandEngine       one-hand recognisers (skips gestures set to Nothing)
     TwoHandGestures     hands up (rest/wake), curtains, frame, double clap
     PointerEngine       pointer mode
     SleightEngine       active/resting, mode switching, real-input override
@@ -171,7 +194,7 @@ Sources/
                       input monitor, overlay chip + ring + intro, mode bar, keyboard,
                       menu bar, settings, guide, preview & tuning
   SleightBrand/       the logo, drawn in code
-Tests/SleightCoreTests  76 tests, including a real dark-room replay
+Tests/SleightCoreTests  85 tests, including a real dark-room replay
 ```
 
 ## The name and the mark

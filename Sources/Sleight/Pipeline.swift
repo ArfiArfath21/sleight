@@ -62,6 +62,11 @@ final class Pipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         shared.clearOutputCursor()
     }
 
+    /// Recognise every gesture, assigned or not (Practice window).
+    func setDetectAll(_ on: Bool) {
+        captureQueue.async { [engine] in engine.detectAll = on }
+    }
+
     /// Active ↔ resting (camera keeps running).
     func setActive(_ on: Bool) {
         captureQueue.async { [self] in

@@ -77,7 +77,8 @@ public final class PointerEngine {
     }
 
     public func step(tracks: HandTracks, time t: Double, aspect: Double,
-                     flickActions: (Flick) -> [EngineAction], hud: inout HUDState) -> Result {
+                     veeFlick: (TrackedHand, inout FlickDetector) -> [EngineAction]?,
+                     hud: inout HUDState) -> Result {
         var r = Result()
         hud.cursor = cursor
 
@@ -144,15 +145,11 @@ public final class PointerEngine {
             }
         }
 
-        // ✌️ flick: scroll, without moving the cursor.
+        // ✌️ flick up/down does what it's assigned (scroll by default), without
+        // moving the cursor.
         if press == .none, hand.shape == .vee {
             frozen = true
-            let th = FlickDetector.Thresholds(minSpeed: config.flickMinSpeed, minDistance: config.flickMinDistance,
-                                              window: config.flickWindow, dominance: config.swipeAxisDominance,
-                                              repeatGap: config.flickRepeatGap, returnGap: config.flickReturnGap)
-            if let f = flicks.detect(hand, shape: .vee, at: t, settle: 0.1, allow: [.up, .down], th) {
-                r.actions += flickActions(f)
-            }
+            r.actions += veeFlick(hand, &flicks) ?? []
         }
 
         // Clicks.

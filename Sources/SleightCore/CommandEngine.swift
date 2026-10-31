@@ -1,40 +1,40 @@
 import Foundation
 
-/// The default mode: a handful of gestures grouped by what you are doing, not by
-/// hand shape. Nothing depends on where the hand is, only on its shape and motion.
+/// The default mode. Recognises one-hand gestures and fires whatever the user
+/// assigned to each (`SleightConfig.gestures`). Recognition depends on the hand's
+/// shape and motion only, never on where the hand is.
 ///
-/// | Task      | Gesture                              | Action                          |
-/// |-----------|--------------------------------------|---------------------------------|
-/// | Reading   | ✌️ flick up / down                    | scroll, with momentum           |
-/// |           | ✌️ flick right / left                 | back / forward                  |
-/// | Windows   | ✋ swipe right / left                 | switch desktop                  |
-/// |           | ✋ swipe up                           | Mission Control                 |
-/// |           | ✊ grab, slide sideways, open hand    | switch app (⌘-Tab)              |
-/// | Media     | 🤏 tap                                | play / pause                    |
-/// |           | 🤏 hold + slide up / down             | volume                          |
-/// |           | 🤏 slide right / left                 | next / previous track           |
-/// | Aiming    | ☝️ hold                               | pointer mode                    |
+/// - ✌️ flick up / down / left / right
+/// - ✋ swipe up / down / left / right
+/// - 👌 tap; 👌 hold, then slide up/down or sideways (sliders)
+/// - ✊ grab, then slide sideways (slider)
+/// - ☝️ hold: pointer mode (reserved)
 ///
-/// Two-hand gestures (clap, curtains, frame) live in `TwoHandGestures`.
+/// Gestures assigned to "Nothing" are not even looked for, so they can never
+/// interfere with the ones in use.
 public final class CommandEngine {
     public var config: SleightConfig
+    /// Recognise every gesture, assigned or not (Practice window).
+    public var detectAll = false
 
     private enum Axis { case horizontal, vertical }
 
-    /// 🤏 held: the media remote.
+    /// 👌 held.
     private struct Remote {
         var handID: Int
         var start: Double
         var origin: Vec2
         var axis: Axis?
+        var action: ActionID = .none
         var base = 0.0
         var index = 0
     }
 
-    /// ✊ held: the app switcher.
+    /// ✊ held.
     private struct Grab {
         var handID: Int
         var origin: Vec2
+        var action: ActionID
         var open = false
         var base = 0.0
         var index = 0
@@ -49,6 +49,8 @@ public final class CommandEngine {
 
     public init(config: SleightConfig = .default) { self.config = config }
 
+    private func wanted(_ g: GestureID) -> Bool { detectAll || config.gestures.isAssigned(g) }
+
     /// Ignore everything until `time`.
     public func quiet(until time: Double) {
         quietUntil = max(quietUntil, time)
@@ -57,19 +59,25 @@ public final class CommandEngine {
 
     /// Abandon whatever is in progress, leaving the OS clean (never ⌘ held down).
     public func cancel() -> [EngineAction] {
-        defer {
-            remote = nil
-            grab = nil
-            pointSince = nil
-            swipes.reset()
-            flicks.reset()
-        }
-        return grab?.open == true ? [.switcher(.cancel)] : []
+        var out: [EngineAction] = []
+        if let g = grab, g.open { out += ActionMapper.end(g.action, cancelled: true) }
+        if let m = remote, m.axis != nil { out += ActionMapper.end(m.action, cancelled: true) }
+        remote = nil
+        grab = nil
+        pointSince = nil
+        swipes.reset()
+        flicks.reset()
+        return out
     }
 
     public struct Result {
         public var actions: [EngineAction] = []
         public var enterPointer: TrackedHand?
+    }
+
+    /// The action for a recognised one-shot gesture, plus the recognition event.
+    func fire(_ g: GestureID, speed: Double?) -> [EngineAction] {
+        [.recognized(g)] + ActionMapper.fire(config.gestures[g], speed: speed, config: config)
     }
 
     public func step(tracks: HandTracks, time t: Double, hud: inout HUDState) -> Result {
@@ -85,15 +93,17 @@ public final class CommandEngine {
         guard let hand = primary(ready) else { pointSince = nil; return r }
         let settled = t - hand.firstSeen >= config.settleTime
 
-        if hand.pinchBegan, settled, hand.pinchDeliberate, hand.pinchOKSign || !config.mediaNeedsOKSign {
+        let okWanted = wanted(.okTap) || wanted(.okSlideVertical) || wanted(.okSlideSideways)
+        if okWanted, hand.pinchBegan, settled, hand.pinchDeliberate,
+           hand.pinchOKSign || !config.mediaNeedsOKSign {
             remote = Remote(handID: hand.id, start: t, origin: hand.anchor)
-            hud.cue = .media
+            hud.cue = .ok
             pointSince = nil
             return r
         }
-        if config.grabEnabled, hand.shape(heldFor: config.settleTime, at: t) == .fist, settled {
-            grab = Grab(handID: hand.id, origin: hand.anchor)
-            hud.cue = .grab
+        if wanted(.fistSlideSideways), hand.shape(heldFor: config.settleTime, at: t) == .fist, settled {
+            grab = Grab(handID: hand.id, origin: hand.anchor, action: config.gestures[.fistSlideSideways])
+            hud.cue = .fist
             pointSince = nil
             return r
         }
@@ -102,29 +112,23 @@ public final class CommandEngine {
 
         switch hand.shape {
         case .open:
-            hud.cue = .swipe
-            guard config.swipesEnabled else { break }
-            var allow: Set<FlickDirection> = [.left, .right, .up]
-            if config.swipeDownEnabled { allow.insert(.down) }
+            let slots: [(FlickDirection, GestureID)] = [(.left, .openSwipeLeft), (.right, .openSwipeRight),
+                                                        (.up, .openSwipeUp), (.down, .openSwipeDown)]
+            let allow = Set(slots.filter { wanted($0.1) }.map(\.0))
+            guard !allow.isEmpty else { break }
+            hud.cue = .open
             let th = FlickDetector.Thresholds(minSpeed: config.swipeMinSpeed, minDistance: config.swipeMinDistance,
                                               window: config.swipeWindow, dominance: config.swipeAxisDominance,
                                               repeatGap: config.flickRepeatGap, returnGap: config.flickReturnGap)
-            if let f = swipes.detect(hand, shape: .open, at: t, settle: config.settleTime, allow: allow, th) {
-                switch f.direction {
-                // Content follows the hand, like the trackpad.
-                case .right: r.actions.append(.shortcut(.spaceLeft))
-                case .left: r.actions.append(.shortcut(.spaceRight))
-                case .up: r.actions.append(.shortcut(.missionControl))
-                case .down: r.actions.append(.shortcut(.appExpose))
-                }
+            if let f = swipes.detect(hand, shape: .open, at: t, settle: config.settleTime, allow: allow, th),
+               let g = slots.first(where: { $0.0 == f.direction })?.1 {
+                r.actions += fire(g, speed: f.speed)
             }
 
         case .vee:
-            hud.cue = .scroll
-            if let f = flicks.detect(hand, shape: .vee, at: t, settle: config.settleTime,
-                                     allow: config.backForwardEnabled ? [.up, .down, .left, .right] : [.up, .down],
-                                     flickThresholds) {
-                r.actions += flickActions(f)
+            if let actions = veeFlick(hand, time: t, settle: config.settleTime, flicks: &flicks) {
+                hud.cue = .vee
+                r.actions += actions
             }
 
         case .point:
@@ -147,23 +151,20 @@ public final class CommandEngine {
         return r
     }
 
-    var flickThresholds: FlickDetector.Thresholds {
-        FlickDetector.Thresholds(minSpeed: config.flickMinSpeed, minDistance: config.flickMinDistance,
-                                 window: config.flickWindow, dominance: config.swipeAxisDominance,
-                                 repeatGap: config.flickRepeatGap, returnGap: config.flickReturnGap)
-    }
-
-    /// ✌️ flick → scroll momentum or back/forward. Shared with pointer mode.
-    func flickActions(_ f: Flick) -> [EngineAction] {
-        let mag = clamp(f.speed * config.scrollFlickGain, config.scrollFlickMin, config.scrollFlickMax)
-        // Wheel axis: negative y = content moves up (reveals what is below).
-        let natural: Double = config.scrollNatural ? 1 : -1
-        switch f.direction {
-        case .up: return [.scrollFlick(velocity: Vec2(0, -mag * natural))]
-        case .down: return [.scrollFlick(velocity: Vec2(0, mag * natural))]
-        case .right: return [.shortcut(.back)]
-        case .left: return [.shortcut(.forward)]
-        }
+    /// ✌️ flicks, shared with pointer mode. nil = no ✌️ gesture is assigned.
+    func veeFlick(_ hand: TrackedHand, time t: Double, settle: Double, flicks: inout FlickDetector,
+                  only: Set<FlickDirection>? = nil) -> [EngineAction]? {
+        let slots: [(FlickDirection, GestureID)] = [(.up, .veeFlickUp), (.down, .veeFlickDown),
+                                                    (.left, .veeFlickLeft), (.right, .veeFlickRight)]
+        var allow = Set(slots.filter { wanted($0.1) }.map(\.0))
+        if let only { allow.formIntersection(only) }
+        guard !allow.isEmpty else { return nil }
+        let th = FlickDetector.Thresholds(minSpeed: config.flickMinSpeed, minDistance: config.flickMinDistance,
+                                          window: config.flickWindow, dominance: config.swipeAxisDominance,
+                                          repeatGap: config.flickRepeatGap, returnGap: config.flickReturnGap)
+        guard let f = flicks.detect(hand, shape: .vee, at: t, settle: settle, allow: allow, th),
+              let g = slots.first(where: { $0.0 == f.direction })?.1 else { return [] }
+        return fire(g, speed: f.speed)
     }
 
     /// The hand to listen to: one that is pinching, else one holding a gesture
@@ -182,67 +183,86 @@ public final class CommandEngine {
 
     /// Steps centred on multiples of `step` with a hysteresis band, so sliding
     /// back feels exactly like sliding forward and never flickers.
-    private func stepper(_ pos: Double, _ step: Double, index: inout Int,
-                         up: EngineAction, down: EngineAction, into actions: inout [EngineAction]) {
-        while pos - Double(index) * step > 0.65 * step { index += 1; actions.append(up) }
-        while Double(index) * step - pos > 0.65 * step { index -= 1; actions.append(down) }
+    private func stepper(_ pos: Double, _ step: Double, index: inout Int, action: ActionID,
+                         into actions: inout [EngineAction]) {
+        while pos - Double(index) * step > 0.65 * step {
+            index += 1
+            actions += ActionMapper.step(action, forward: true)
+        }
+        while Double(index) * step - pos > 0.65 * step {
+            index -= 1
+            actions += ActionMapper.step(action, forward: false)
+        }
     }
 
-    // MARK: 🤏 media remote
+    // MARK: 👌
 
     private func stepRemote(tracks: HandTracks, time t: Double, hud: inout HUDState, result r: inout Result) {
         guard var m = remote else { return }
-        guard let hand = tracks.hand(id: m.handID) else { remote = nil; return }
-        hud.cue = m.axis == .vertical ? .volume : .media
+        guard let hand = tracks.hand(id: m.handID) else {
+            if m.axis != nil { r.actions += ActionMapper.end(m.action, cancelled: true) }
+            remote = nil
+            return
+        }
+        switch m.axis {
+        case .vertical: hud.cue = .okSlideVertical
+        case .horizontal: hud.cue = .okSlideSideways
+        case nil: hud.cue = .ok
+        }
         guard hand.visible else { return }
 
         if hand.pinchEnded || !hand.pinched {
-            if m.axis == nil, t - m.start <= config.pinchTapMax { r.actions.append(.media(.playPause)) }
+            if m.axis == nil, t - m.start <= config.pinchTapMax, wanted(.okTap) {
+                r.actions += fire(.okTap, speed: nil)
+            }
+            if m.axis != nil { r.actions += ActionMapper.end(m.action, cancelled: false) }
             remote = nil
             return
         }
 
         let offset = (hand.anchor - m.origin) / hand.scale
-        let held = t - m.start
         // A hand that pinched while moving is not using the remote: drop it silently.
-        if held < config.mediaHold {
+        if t - m.start < config.mediaHold {
             if offset.length > config.mediaEarlyMoveCancel { remote = nil }
             return
         }
         if m.axis == nil, offset.length >= config.pinchAxisLock {
-            if abs(offset.y) >= abs(offset.x) {
-                m.axis = .vertical
-                m.base = offset.y
-                r.actions.append(.media(offset.y < 0 ? .volumeUp : .volumeDown))
-            } else {
-                m.axis = .horizontal
-                // One skip per pinch: right = next track.
-                if config.trackSkipEnabled { r.actions.append(.media(offset.x > 0 ? .next : .previous)) }
-            }
+            let vertical = abs(offset.y) >= abs(offset.x)
+            let g: GestureID = vertical ? .okSlideVertical : .okSlideSideways
+            guard wanted(g) else { remote = nil; return }
+            m.axis = vertical ? .vertical : .horizontal
+            m.action = config.gestures[g]
+            m.base = vertical ? offset.y : offset.x
+            r.actions.append(.recognized(g))
+            // Up and right are "forward".
+            r.actions += ActionMapper.begin(m.action, forward: vertical ? offset.y < 0 : offset.x > 0)
         }
-        if m.axis == .vertical {
-            // Hand up (negative y) = louder.
-            stepper(m.base - offset.y, config.volumeStep, index: &m.index,
-                    up: .media(.volumeUp), down: .media(.volumeDown), into: &r.actions)
+        switch m.axis {
+        case .vertical:
+            stepper(m.base - offset.y, config.volumeStep, index: &m.index, action: m.action, into: &r.actions)
+        case .horizontal:
+            stepper(offset.x - m.base, config.appStep, index: &m.index, action: m.action, into: &r.actions)
+        case nil:
+            break
         }
         remote = m
     }
 
-    // MARK: ✊ app switcher
+    // MARK: ✊
 
     private func stepGrab(tracks: HandTracks, time t: Double, hud: inout HUDState, result r: inout Result) {
         guard var g = grab else { return }
         guard let hand = tracks.hand(id: g.handID) else {
-            if g.open { r.actions.append(.switcher(.cancel)) }
+            if g.open { r.actions += ActionMapper.end(g.action, cancelled: true) }
             grab = nil
             return
         }
-        hud.cue = g.open ? .apps : .grab
+        hud.cue = g.open ? .fistSliding : .fist
         guard hand.visible else { return }
 
-        // Opening the hand drops the selection.
+        // Opening the hand ends the slide (and picks the app, for the switcher).
         if hand.shape != .fist {
-            if g.open { r.actions.append(.switcher(.commit)) }
+            if g.open { r.actions += ActionMapper.end(g.action, cancelled: false) }
             grab = nil
             return
         }
@@ -251,12 +271,11 @@ public final class CommandEngine {
         if !g.open, abs(offset.x) >= config.grabLock, abs(offset.x) > abs(offset.y) {
             g.open = true
             g.base = offset.x
-            // ⌘-Tab already selects the next app.
-            r.actions.append(.switcher(.begin))
+            r.actions.append(.recognized(.fistSlideSideways))
+            r.actions += ActionMapper.begin(g.action, forward: offset.x > 0)
         }
         if g.open {
-            stepper(offset.x - g.base, config.appStep, index: &g.index,
-                    up: .switcher(.next), down: .switcher(.previous), into: &r.actions)
+            stepper(offset.x - g.base, config.appStep, index: &g.index, action: g.action, into: &r.actions)
         }
         grab = g
     }

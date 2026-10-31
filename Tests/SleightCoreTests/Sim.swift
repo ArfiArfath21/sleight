@@ -109,6 +109,26 @@ final class Sim {
 
     /// Anything that changes the OS (everything except mode bookkeeping).
     var effects: [EngineAction] {
-        all.filter { if case .modeChanged = $0 { return false }; if case .stopMomentum = $0 { return false }; return true }
+        all.filter {
+            switch $0 {
+            case .modeChanged, .stopMomentum, .recognized: return false
+            default: return true
+            }
+        }
     }
+}
+
+extension SleightConfig {
+    /// 👌 set up as a media remote (not the default any more).
+    static var mediaRemote: SleightConfig {
+        var c = SleightConfig()
+        c.gestures[.okTap] = .playPause
+        c.gestures[.okSlideVertical] = .stepVolume
+        c.gestures[.okSlideSideways] = .stepArrowsHorizontal
+        return c
+    }
+}
+
+extension Sim {
+    var recognized: [GestureID] { all.compactMap { if case .recognized(let g) = $0 { return g }; return nil } }
 }

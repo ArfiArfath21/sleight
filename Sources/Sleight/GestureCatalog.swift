@@ -1,46 +1,65 @@
 import Foundation
 import SleightCore
 
-/// Every gesture, explained in plain words. One source for the Guide and the
-/// Practice window, and the mapping from engine actions back to gestures.
+/// Every gesture Sleight recognises, explained in plain words. One source for
+/// Settings, the Guide and the Practice window. What a gesture *does* comes from
+/// the user's assignments, except for the reserved ones that drive Sleight itself.
 struct GestureInfo: Identifiable, Equatable {
-    let id: String
+    var id: String { gesture?.rawValue ?? reserved!.rawValue }
+    let gesture: GestureID?
+    let reserved: ReservedGesture?
     let group: String
     let title: String
-    let effect: String
     let how: String
+
+    init(_ g: GestureID, _ group: String, _ title: String, _ how: String) {
+        gesture = g; reserved = nil; self.group = group; self.title = title; self.how = how
+    }
+
+    init(reserved r: ReservedGesture, _ group: String, _ title: String, _ how: String) {
+        gesture = nil; reserved = r; self.group = group; self.title = title; self.how = how
+    }
+
+    func effect(_ map: GestureMap) -> String {
+        if let g = gesture { return map[g].title }
+        switch reserved! {
+        case .handsUp: return "Rest / wake Sleight"
+        case .pointHold: return "Pointer mode"
+        case .fistHold: return "Leave pointer mode"
+        }
+    }
 }
 
 enum GestureCatalog {
+    static let vee = "✌️  Two fingers"
+    static let open = "✋  Open hand"
+    static let ok = "👌  OK sign"
+    static let fist = "✊  Fist"
+    static let both = "🙌  Both hands"
+    static let pointer = "☝️  Pointer"
+
+    private static let veeHow = "Peace sign: index and middle finger up, the others folded, palm facing the screen. Snap it about a hand's length, quick, like flicking water off your fingers, then bring it back slowly."
+    private static let openHow = "Open hand, palm facing the screen. Sweep it quickly across, like pushing a page aside."
+
     static let all: [GestureInfo] = [
-        GestureInfo(id: "flickUp", group: "Reading", title: "✌️  Flick up", effect: "Scroll down the page",
-                    how: "Make a peace sign (index and middle finger up, the others folded), palm facing the screen. Snap it upward about a hand's length, quick, like flicking water off your fingers. Bring it back down slowly. Flick again to keep going."),
-        GestureInfo(id: "flickDown", group: "Reading", title: "✌️  Flick down", effect: "Scroll back up",
-                    how: "Same peace sign, snap it downward. Bring it back up slowly."),
-        GestureInfo(id: "flickSide", group: "Reading", title: "✌️  Flick sideways", effect: "Back · Forward",
-                    how: "Peace sign, snap it to the right to go back, to the left to go forward."),
-        GestureInfo(id: "swipeSide", group: "Windows", title: "✋  Swipe sideways", effect: "Switch desktop",
-                    how: "Open hand, palm facing the screen. Sweep it quickly left or right across your body, like pushing a page aside."),
-        GestureInfo(id: "swipeUp", group: "Windows", title: "✋  Swipe up", effect: "Mission Control",
-                    how: "Open hand, palm facing the screen. Sweep it quickly upward."),
-        GestureInfo(id: "grab", group: "Windows", title: "✊  Grab and slide", effect: "Switch app",
-                    how: "Close your hand into a fist and pause for a beat. Slide the fist sideways: the app switcher opens and moves along as you slide. Open your hand to switch to the highlighted app."),
-        GestureInfo(id: "tap", group: "Media", title: "👌  Tap", effect: "Play · Pause",
-                    how: "OK sign: touch your thumb and index fingertips while the other three fingers stay up. Start with the fingers apart, pinch, then let go quickly."),
-        GestureInfo(id: "volume", group: "Media", title: "👌  Hold, slide up / down", effect: "Volume",
-                    how: "Make the OK sign and hold it still for a moment. Then slide your hand up for louder, down for quieter. Let go when done."),
-        GestureInfo(id: "track", group: "Media", title: "👌  Hold, slide sideways", effect: "Next · Previous track",
-                    how: "Make the OK sign and hold it still for a moment, then slide right for the next track, left for the previous."),
-        GestureInfo(id: "handsUp", group: "Both hands", title: "🙌  Both hands up, hold", effect: "Rest · Wake Sleight",
-                    how: "Raise both hands open, palms to the screen, about shoulder-width apart, as if saying \"hold on\". Keep them still for a second until the ring fills. Resting, Sleight keeps watching but only this gesture wakes it."),
-        GestureInfo(id: "curtains", group: "Both hands", title: "🖐🖐  Part the curtains", effect: "Show desktop",
-                    how: "Bring both open hands together in front of you, palms to the screen, side by side and almost touching. Wait for \"Part the curtains\" to appear (a moment), then sweep them apart sideways, fast."),
-        GestureInfo(id: "frame", group: "Both hands", title: "🫲🫱  Frame it", effect: "Screenshot",
-                    how: "Make an L with each hand: index finger up, thumb sticking out sideways, other fingers folded. Hold your hands apart like framing a photo and keep still for half a second."),
-        GestureInfo(id: "point", group: "Pointer", title: "☝️  Point and hold", effect: "Pointer mode",
-                    how: "Point your index finger up with the other fingers folded. Hold still for half a second. Then move your hand to move the cursor, pinch to click."),
-        GestureInfo(id: "exitPointer", group: "Pointer", title: "✊  Fist", effect: "Leave pointer mode",
-                    how: "While in pointer mode, close your hand into a fist and hold it for a moment."),
+        GestureInfo(.veeFlickUp, vee, "Flick up", veeHow),
+        GestureInfo(.veeFlickDown, vee, "Flick down", "Same peace sign, snapped downward."),
+        GestureInfo(.veeFlickRight, vee, "Flick right", "Same peace sign, snapped to the right."),
+        GestureInfo(.veeFlickLeft, vee, "Flick left", "Same peace sign, snapped to the left."),
+        GestureInfo(.openSwipeRight, open, "Swipe right", openHow),
+        GestureInfo(.openSwipeLeft, open, "Swipe left", "Open hand, swept quickly to the left."),
+        GestureInfo(.openSwipeUp, open, "Swipe up", "Open hand, swept quickly upward."),
+        GestureInfo(.openSwipeDown, open, "Swipe down", "Open hand, swept quickly downward. Start with the hand high: dropping a hand to rest is not a swipe."),
+        GestureInfo(.okTap, ok, "Tap", "Touch thumb and index fingertips while the other three fingers stay up. Start with the fingers apart, pinch, let go quickly."),
+        GestureInfo(.okSlideVertical, ok, "Hold, slide up / down", "Make the OK sign and hold it still for a moment, then slide up or down. Each stretch of travel is one step. Let go to stop."),
+        GestureInfo(.okSlideSideways, ok, "Hold, slide sideways", "Make the OK sign, hold it still for a moment, then slide left or right, one step per stretch of travel."),
+        GestureInfo(.fistSlideSideways, fist, "Grab and slide", "Close your hand into a fist and pause for a beat, then slide it sideways: one step per stretch of travel. Open your hand to finish (for the app switcher, that picks the app)."),
+        GestureInfo(reserved: .handsUp, both, "Both hands up, hold", "Raise both hands open, palms to the screen, about shoulder-width apart, as if saying \"hold on\". Keep them still for a second until the ring fills. While resting, Sleight keeps watching but only this wakes it."),
+        GestureInfo(.curtains, both, "Part the curtains", "Bring both open hands together in front of you, palms to the screen, side by side and almost touching. When \"Part the curtains\" appears, sweep them apart sideways, fast."),
+        GestureInfo(.frame, both, "Frame it", "Make an L with each hand: index finger up, thumb out sideways, other fingers folded. Hold the hands apart like framing a photo and keep still for half a second."),
+        GestureInfo(.doubleClap, both, "Double clap (experimental)", "Clap twice, quickly, with your hands in view. Hands hide each other at the moment of a clap, so the camera misses some."),
+        GestureInfo(reserved: .pointHold, pointer, "Point and hold", "Point your index finger up with the other fingers folded and hold still for half a second. Move your hand to move the cursor; pinch to click, pinch twice to double-click, pinch-hold-move to drag, thumb + middle finger to right-click."),
+        GestureInfo(reserved: .fistHold, pointer, "Fist (in pointer mode)", "Close your hand into a fist and hold it for a moment."),
     ]
 
     static var groups: [String] {
@@ -49,29 +68,63 @@ enum GestureCatalog {
         return seen
     }
 
-    /// Which gesture produced an action (for the Practice window).
-    static func gestureID(for action: EngineAction, natural: Bool) -> String? {
+    static func info(_ g: GestureID) -> GestureInfo? { all.first { $0.gesture == g } }
+
+    /// Which catalog entry an engine action came from (Practice window).
+    static func entryID(for action: EngineAction) -> String? {
         switch action {
-        case .scrollFlick(let v): return (v.y < 0) == natural ? "flickUp" : "flickDown"
-        case .shortcut(let s):
-            switch s {
-            case .back, .forward: return "flickSide"
-            case .spaceLeft, .spaceRight: return "swipeSide"
-            case .missionControl, .appExpose: return "swipeUp"
-            case .showDesktop: return "curtains"
-            case .screenshot: return "frame"
-            }
-        case .switcher(.begin): return "grab"
-        case .media(let m):
-            switch m {
-            case .playPause: return "tap"
-            case .volumeUp, .volumeDown: return "volume"
-            case .next, .previous: return "track"
-            }
-        case .activeChanged: return "handsUp"
-        case .modeChanged(.pointer, _): return "point"
-        case .modeChanged(.command, .gesture): return "exitPointer"
+        case .recognized(let g): return g.rawValue
+        case .activeChanged: return ReservedGesture.handsUp.rawValue
+        case .modeChanged(.pointer, .gesture): return ReservedGesture.pointHold.rawValue
+        case .modeChanged(.command, .gesture): return ReservedGesture.fistHold.rawValue
         default: return nil
+        }
+    }
+
+    /// SF Symbol for an action, for confirmation chips.
+    static func symbol(_ a: ActionID) -> String {
+        switch a {
+        case .none: return "circle"
+        case .scrollDown: return "arrow.down"
+        case .scrollUp: return "arrow.up"
+        case .back: return "chevron.backward"
+        case .forward: return "chevron.forward"
+        case .nextTab, .previousTab, .stepTabs: return "square.on.square"
+        case .newTab: return "plus.square.on.square"
+        case .reopenTab: return "arrow.uturn.backward"
+        case .desktopLeft: return "arrow.left.square"
+        case .desktopRight: return "arrow.right.square"
+        case .stepDesktops: return "rectangle.split.3x1"
+        case .missionControl: return "rectangle.3.group"
+        case .appWindows: return "rectangle.stack"
+        case .showDesktop: return "macwindow.on.rectangle"
+        case .previousApp, .stepAppSwitcher: return "square.stack.3d.up"
+        case .hideApp: return "eye.slash"
+        case .minimize: return "minus.square"
+        case .fullScreen: return "arrow.up.left.and.arrow.down.right"
+        case .playPause: return "playpause.fill"
+        case .nextTrack: return "forward.fill"
+        case .previousTrack: return "backward.fill"
+        case .volumeUp: return "speaker.wave.3.fill"
+        case .volumeDown: return "speaker.wave.1.fill"
+        case .stepVolume: return "speaker.wave.2"
+        case .mute: return "speaker.slash.fill"
+        case .zoomIn, .stepZoom: return "plus.magnifyingglass"
+        case .zoomOut: return "minus.magnifyingglass"
+        case .arrowLeft: return "arrow.left"
+        case .arrowRight: return "arrow.right"
+        case .arrowUp: return "arrow.up"
+        case .arrowDown: return "arrow.down"
+        case .stepArrowsHorizontal: return "arrow.left.and.right"
+        case .stepArrowsVertical: return "arrow.up.and.down"
+        case .screenshot: return "camera.viewfinder"
+        case .screenshotSelection: return "crop"
+        case .screenshotTool: return "camera.aperture"
+        case .spotlight: return "magnifyingglass"
+        case .lockScreen: return "lock.fill"
+        case .toggleKeyboard: return "keyboard"
+        case .restWake: return "moon"
+        case .stepBrightness: return "sun.max"
         }
     }
 }

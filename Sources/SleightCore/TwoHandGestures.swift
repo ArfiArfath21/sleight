@@ -14,6 +14,10 @@ import Foundation
 ///   screenshot.
 public final class TwoHandGestures {
     public var config: SleightConfig
+    /// Recognise every gesture, assigned or not (Practice window).
+    public var detectAll = false
+
+    private func wanted(_ g: GestureID) -> Bool { detectAll || config.gestures.isAssigned(g) }
 
     public enum Event: Equatable, Sendable {
         case clap, doubleClap, curtains, frame, handsUp
@@ -95,7 +99,7 @@ public final class TwoHandGestures {
     // MARK: Clap
 
     private func detectClap(distance d: Double, time t: Double, result r: inout Result) {
-        guard config.clapEnabled else { return }
+        guard wanted(.doubleClap) else { return }
         if contactLatched {
             // Wait for the hands to separate before another clap can count.
             if d > config.clapContactDistance + 0.6 { contactLatched = false }
@@ -156,7 +160,7 @@ public final class TwoHandGestures {
 
     private func detectCurtains(_ a: TrackedHand, _ b: TrackedHand, distance d: Double, time t: Double,
                                 result r: inout Result) {
-        guard config.curtainsEnabled else { return }
+        guard wanted(.curtains) else { return }
         let bothOpen = a.shape(heldFor: config.settleTime, at: t) == .open
             && b.shape(heldFor: config.settleTime, at: t) == .open
         if bothOpen, d < config.curtainsTogether, a.speed < 1.5, b.speed < 1.5 {
@@ -190,7 +194,7 @@ public final class TwoHandGestures {
     // MARK: Frame
 
     private func detectFrame(_ a: TrackedHand, _ b: TrackedHand, time t: Double, result r: inout Result) {
-        guard config.frameEnabled else { return }
+        guard wanted(.frame) else { return }
         let framing = a.pose.isFrameL(config: config) && b.pose.isFrameL(config: config)
             && a.speed < 1.2 && b.speed < 1.2
         guard framing else { frameSince = nil; return }

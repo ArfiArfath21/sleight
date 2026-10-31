@@ -19,23 +19,21 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Everyday gestures") {
-                Toggle("✌️ Flick sideways for back / forward", isOn: $store.config.backForwardEnabled)
-                Toggle("✋ Swipe left/right for desktops, up for Mission Control", isOn: $store.config.swipesEnabled)
-                Toggle("✋ Swipe down for app windows (Exposé)", isOn: $store.config.swipeDownEnabled)
-                Toggle("✊ Grab and slide to switch apps", isOn: $store.config.grabEnabled)
-                Toggle("👌 Media needs an OK sign (other fingers up)", isOn: $store.config.mediaNeedsOKSign)
-                Toggle("🤏 Slide sideways to skip tracks", isOn: $store.config.trackSkipEnabled)
-                Toggle("Natural scrolling", isOn: $store.config.scrollNatural)
-                Toggle("Show gesture hints", isOn: $store.showHints)
+            ForEach(GestureCatalog.groups, id: \.self) { group in
+                Section(group) {
+                    ForEach(GestureCatalog.all.filter { $0.group == group }) { info in
+                        GestureAssignmentRow(info: info, store: store)
+                    }
+                }
             }
-            Section("Two hands") {
-                Toggle("🙌 Both hands up, held, to rest / wake", isOn: $store.config.handsUpEnabled)
-                Toggle("👏👏 Double clap to rest / wake (experimental: the camera misses many claps)", isOn: $store.config.clapEnabled)
-                Toggle("🖐🖐 Part the curtains to show the desktop", isOn: $store.config.curtainsEnabled)
-                Toggle("Frame with both hands to take a screenshot", isOn: $store.config.frameEnabled)
-                Tunable("Clap speed needed", value: $store.config.clapApproachSpeed, range: 2...12, format: "%.1f hand/s",
-                        help: "Lower if claps are missed; raise if they fire by accident.")
+            Section {
+                Toggle("Show gesture hints", isOn: $store.showHints)
+                Toggle("👌 needs the other three fingers up", isOn: $store.config.mediaNeedsOKSign)
+                Toggle("Both hands up rests / wakes Sleight", isOn: $store.config.handsUpEnabled)
+                HStack {
+                    Spacer()
+                    Button("Reset gestures to defaults") { store.config.gestures = GestureMap() }
+                }
             }
             Section("Sensitivity") {
                 Tunable("Swipe speed needed", value: $store.config.swipeMinSpeed, range: 2...10, format: "%.1f hand/s",
@@ -45,8 +43,11 @@ struct SettingsView: View {
                 Tunable("Scroll glide", value: $store.config.momentumDecay, range: 0.1...1, format: "%.2f s",
                         help: "How long a flicked page keeps moving.")
                 Tunable("Hold ☝️ to point", value: $store.config.pointHoldTime, range: 0.2...1.2, format: "%.2f s", help: nil)
-                Tunable("Apps per hand-length", value: $store.config.appStep, range: 0.2...1.0, format: "%.2f",
-                        help: "Pinch-and-slide distance per app in the switcher.")
+                Tunable("Slide step (sideways)", value: $store.config.appStep, range: 0.2...1.0, format: "%.2f hand",
+                        help: "How far a sideways slide travels per step (apps, tabs, desktops…).")
+                Tunable("Slide step (up / down)", value: $store.config.volumeStep, range: 0.1...0.6, format: "%.2f hand", help: nil)
+                Tunable("Clap speed needed", value: $store.config.clapApproachSpeed, range: 2...12, format: "%.1f hand/s",
+                        help: "Only if a double clap is assigned.")
             }
             Section("Pointer mode") {
                 Picker("Mapping", selection: $store.config.mappingMode) {
@@ -78,6 +79,45 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(minWidth: 480, minHeight: 500)
+    }
+}
+
+/// One gesture: what it is, and a menu of what it does. Reserved gestures
+/// (which drive Sleight itself) are shown but can't be changed.
+private struct GestureAssignmentRow: View {
+    let info: GestureInfo
+    @ObservedObject var store: ConfigStore
+
+    var body: some View {
+        if let g = info.gesture {
+            Picker(selection: Binding(get: { store.config.gestures[g] },
+                                      set: { store.config.gestures[g] = $0 })) {
+                Text("Nothing").tag(ActionID.none)
+                let choices = ActionID.choices(for: g.kind).filter { $0 != .none }
+                ForEach(Self.groups(choices), id: \.self) { group in
+                    Section(group) {
+                        ForEach(choices.filter { $0.group == group }, id: \.self) { a in
+                            Text(a.title).tag(a)
+                        }
+                    }
+                }
+            } label: {
+                Text(info.title).help(info.how)
+            }
+        } else {
+            LabeledContent {
+                Text(info.effect(store.config.gestures)).foregroundStyle(.secondary)
+            } label: {
+                Text(info.title).help(info.how)
+                Text("built in").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    static func groups(_ actions: [ActionID]) -> [String] {
+        var seen: [String] = []
+        for a in actions where !seen.contains(a.group) { seen.append(a.group) }
+        return seen
     }
 }
 

@@ -65,7 +65,7 @@ final class ScrollFlickTests: XCTestCase {
         sim.move(&v, by: Vec2(0, -0.2), over: 1.2)
         sim.move(&v, by: Vec2(0.2, 0), over: 1.2)
         XCTAssertTrue(sim.effects.isEmpty)
-        XCTAssertEqual(sim.lastHUD.cue, .scroll)
+        XCTAssertEqual(sim.lastHUD.cue, .vee)
     }
 
     func testTwoFingerSideFlickIsBackForward() {
@@ -157,7 +157,7 @@ final class SwipeTests: XCTestCase {
 
 final class MediaRemoteTests: XCTestCase {
     func testPinchTapPlaysOrPauses() {
-        let sim = Sim()
+        let sim = Sim(config: .mediaRemote)
         var h = SyntheticHand.relaxed(at: Vec2(0.65, 0.65))
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
@@ -167,7 +167,7 @@ final class MediaRemoteTests: XCTestCase {
     }
 
     func testLongPinchWithoutSlidingDoesNothing() {
-        let sim = Sim()
+        let sim = Sim(config: .mediaRemote)
         var h = SyntheticHand.relaxed(at: Vec2(0.65, 0.65))
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
@@ -177,7 +177,7 @@ final class MediaRemoteTests: XCTestCase {
     }
 
     func testPinchSlideVerticalChangesVolume() {
-        let sim = Sim()
+        let sim = Sim(config: .mediaRemote)
         var h = SyntheticHand.relaxed(at: Vec2(0.65, 0.75))
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
@@ -196,23 +196,24 @@ final class MediaRemoteTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(sim.media.count, 2)
     }
 
-    func testPinchSlideSidewaysSkipsOneTrack() {
-        let sim = Sim()
+    func testPinchSlideSidewaysStepsItsAssignedAction() {
+        let sim = Sim(config: .mediaRemote)
         var h = SyntheticHand.relaxed(at: Vec2(0.45, 0.65))
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
         sim.hold(h, for: 0.35)
         sim.move(&h, by: Vec2(0.25, 0), over: 0.4)
         sim.unpinch(&h)
-        XCTAssertEqual(sim.media, [.next])
+        XCTAssertEqual(sim.shortcuts.first, .arrowRight)
+        XCTAssertTrue(sim.shortcuts.allSatisfy { $0 == .arrowRight })
         sim.clear()
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
         sim.hold(h, for: 0.35)
         sim.move(&h, by: Vec2(-0.25, 0), over: 0.4)
         sim.unpinch(&h)
-        XCTAssertEqual(sim.media, [.previous])
-        XCTAssertTrue(sim.switcher.isEmpty, "media and apps are separate families")
+        XCTAssertEqual(sim.shortcuts.first, .arrowLeft)
+        XCTAssertTrue(sim.switcher.isEmpty)
     }
 }
 
@@ -220,7 +221,7 @@ final class AccidentalMediaTests: XCTestCase {
     /// A hand that looks pinched from the start (thumb resting on the index) and
     /// wanders around: the most common false trigger on real hands.
     func testHandThatJustLooksPinchedNeverTriggersMedia() {
-        let sim = Sim()
+        let sim = Sim(config: .mediaRemote)
         var h = SyntheticHand.relaxed(at: Vec2(0.6, 0.6))
         h.pinch = 1
         h.fingers[0] = 0.6
@@ -232,7 +233,7 @@ final class AccidentalMediaTests: XCTestCase {
     }
 
     func testCurledHandPinchIsNotTheRemote() {
-        let sim = Sim()
+        let sim = Sim(config: .mediaRemote)
         var h = SyntheticHand.relaxed(at: Vec2(0.6, 0.6))
         h.fingers = [1, 0.1, 0.1, 0.1]   // other fingers folded: not an OK sign
         sim.hold(h, for: 0.4)
@@ -242,7 +243,7 @@ final class AccidentalMediaTests: XCTestCase {
     }
 
     func testPinchWhileMovingIsIgnored() {
-        let sim = Sim()
+        let sim = Sim(config: .mediaRemote)
         var h = SyntheticHand.relaxed(at: Vec2(0.5, 0.7))
         sim.hold(h, for: 0.4)
         sim.move(&h, by: Vec2(0, -0.2), over: 0.4) { hand, f in
@@ -382,7 +383,7 @@ final class ClapTests: XCTestCase {
 
     func clapSim() -> Sim {
         var c = SleightConfig()
-        c.clapEnabled = true
+        c.gestures[.doubleClap] = .restWake
         c.handsUpEnabled = false
         return Sim(config: c)
     }
@@ -397,6 +398,7 @@ final class ClapTests: XCTestCase {
         clap(sim, &l, &r)
         XCTAssertFalse(sim.engine.active)
         XCTAssertEqual(sim.all.filter { if case .activeChanged = $0 { return true }; return false }, [.activeChanged(false)])
+        XCTAssertTrue(sim.recognized.contains(.doubleClap))
         sim.hold([l, r], for: 1.2)
         clap(sim, &l, &r)
         clap(sim, &l, &r)
@@ -571,5 +573,104 @@ final class SafetyTests: XCTestCase {
             sim.hold(shape, for: 2.0)
         }
         XCTAssertTrue(sim.effects.isEmpty, "\(sim.effects)")
+    }
+}
+
+final class MappingTests: XCTestCase {
+    func testMediaIsOffByDefaultSoPinchesDoNothing() {
+        let sim = Sim()
+        var h = SyntheticHand.relaxed(at: Vec2(0.65, 0.65))
+        sim.hold(h, for: 0.3)
+        sim.pinch(&h)
+        sim.unpinch(&h)
+        sim.pinch(&h)
+        sim.hold(h, for: 0.4)
+        sim.move(&h, by: Vec2(0, -0.2), over: 0.5)
+        sim.unpinch(&h)
+        XCTAssertTrue(sim.effects.isEmpty)
+        XCTAssertTrue(sim.recognized.isEmpty, "unassigned gestures are not even looked for")
+        XCTAssertFalse(GestureMap().isAssigned(.okTap))
+    }
+
+    func testReassigningASwipe() {
+        var c = SleightConfig()
+        c.gestures[.openSwipeUp] = .screenshotTool
+        c.gestures[.openSwipeLeft] = .none
+        let sim = Sim(config: c)
+        var h = SyntheticHand.openPalm(at: Vec2(0.65, 0.7))
+        sim.hold(h, for: 0.3)
+        sim.move(&h, by: Vec2(0, -0.25), over: 0.15)
+        sim.hold(h, for: 0.8)
+        sim.move(&h, by: Vec2(-0.25, 0), over: 0.15)
+        sim.hold(h, for: 0.3)
+        XCTAssertEqual(sim.shortcuts, [.screenshotTool])
+    }
+
+    func testFlickCanDoAnythingOneShot() {
+        var c = SleightConfig()
+        c.gestures[.veeFlickUp] = .nextTab
+        let sim = Sim(config: c)
+        var v = SyntheticHand.vee(at: Vec2(0.65, 0.65))
+        sim.hold(v, for: 0.3)
+        sim.move(&v, by: Vec2(0, -0.15), over: 0.15)
+        sim.hold(v, for: 0.3)
+        XCTAssertEqual(sim.shortcuts, [.nextTab])
+        XCTAssertTrue(sim.flicks.isEmpty)
+    }
+
+    func testGrabCanDriveTabsInsteadOfApps() {
+        var c = SleightConfig()
+        c.gestures[.fistSlideSideways] = .stepTabs
+        let sim = Sim(config: c)
+        var h = SyntheticHand.openPalm(at: Vec2(0.4, 0.65))
+        sim.hold(h, for: 0.3)
+        sim.move(&h, by: .zero, over: 0.12) { hand, f in hand.fingers = hand.fingers.map { _ in 1 - f } }
+        sim.hold(h, for: 0.2)
+        sim.move(&h, by: Vec2(0.3, 0), over: 0.6)
+        XCTAssertTrue(sim.switcher.isEmpty)
+        XCTAssertGreaterThanOrEqual(sim.shortcuts.filter { $0 == .nextTab }.count, 2)
+    }
+
+    func testOneShotGestureIgnoresAStepAction() {
+        var m = GestureMap()
+        m[.veeFlickUp] = .stepVolume
+        XCTAssertEqual(m[.veeFlickUp], GestureMap.defaults[.veeFlickUp])
+        m[.fistSlideSideways] = .playPause
+        XCTAssertEqual(m[.fistSlideSideways], GestureMap.defaults[.fistSlideSideways])
+    }
+
+    func testChoicesMatchTheGestureKind() {
+        XCTAssertTrue(ActionID.choices(for: .slider).allSatisfy { $0 == .none || $0.isStep })
+        XCTAssertTrue(ActionID.choices(for: .oneShot).allSatisfy { !$0.isStep })
+        XCTAssertTrue(ActionID.choices(for: .oneShot).contains(.playPause), "media stays available to assign")
+    }
+
+    func testMappingSurvivesSaving() throws {
+        var c = SleightConfig()
+        c.gestures[.okTap] = .playPause
+        let back = try SleightConfig.decode(from: JSONEncoder().encode(c))
+        XCTAssertEqual(back.gestures[.okTap], .playPause)
+        XCTAssertEqual(back.gestures[.veeFlickUp], .scrollDown)
+    }
+
+    func testAssigningRestWakeToAOneHandGesture() {
+        var c = SleightConfig()
+        c.gestures[.openSwipeDown] = .restWake
+        let sim = Sim(config: c)
+        var h = SyntheticHand.openPalm(at: Vec2(0.65, 0.4))
+        sim.hold(h, for: 0.3)
+        sim.move(&h, by: Vec2(0, 0.25), over: 0.15)
+        XCTAssertFalse(sim.engine.active)
+    }
+
+    func testPracticeRecognisesUnassignedGesturesWithoutActing() {
+        let sim = Sim()
+        sim.engine.detectAll = true
+        var h = SyntheticHand.relaxed(at: Vec2(0.65, 0.65))
+        sim.hold(h, for: 0.3)
+        sim.pinch(&h)
+        sim.unpinch(&h)
+        XCTAssertEqual(sim.recognized, [.okTap])
+        XCTAssertTrue(sim.effects.isEmpty)
     }
 }

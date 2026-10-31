@@ -53,8 +53,6 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var realInputCooldown: Double = 1.0
 
     // MARK: Command mode: swipes (open palm)
-    public var swipesEnabled: Bool = true
-    public var swipeDownEnabled: Bool = false
     public var swipeMinSpeed: Double = 4.0
     public var swipeMinDistance: Double = 0.9
     public var swipeWindow: Double = 0.2
@@ -70,9 +68,6 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var scrollFlickGain: Double = 420
     public var scrollFlickMin: Double = 900
     public var scrollFlickMax: Double = 5000
-    /// true: flicking up moves content up (like the trackpad's natural scrolling).
-    public var scrollNatural: Bool = true
-    public var backForwardEnabled: Bool = true
     /// After a flick, the same direction can fire again after this long...
     public var flickRepeatGap: Double = 0.22
     /// ...and the opposite direction (the return stroke) after this long.
@@ -96,10 +91,8 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     /// Slide this far (hs) to choose: vertical = volume, sideways = next/previous track.
     public var pinchAxisLock: Double = 0.4
     public var volumeStep: Double = 0.22
-    public var trackSkipEnabled: Bool = true
 
     // MARK: Command mode: fist = grab the app switcher
-    public var grabEnabled: Bool = true
     /// Slide this far (hs) with a fist before the switcher opens.
     public var grabLock: Double = 0.35
     public var appStep: Double = 0.45
@@ -116,9 +109,6 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var handsUpMinApart: Double = 2.8
     public var handsUpMaxTilt: Double = 1.5
     public var handsUpMaxSpeed: Double = 0.9
-    /// Double clap also toggles active / resting. Off by default: hands hide each
-    /// other at the moment of a clap, so the camera alone misses many.
-    public var clapEnabled: Bool = false
     /// Hands must close faster than this (hs/s) for a clap...
     public var clapApproachSpeed: Double = 5.0
     /// ...and meet (palms closer than this, hs) or merge into one detection.
@@ -127,12 +117,10 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var doubleClapMin: Double = 0.12
     public var doubleClapMax: Double = 0.9
     /// Part the curtains: open hands held together, then swept apart.
-    public var curtainsEnabled: Bool = true
     public var curtainsTogether: Double = 2.6
     public var curtainsHold: Double = 0.25
     public var curtainsSpread: Double = 2.2
     /// Frame: both hands in an "L", held this long.
-    public var frameEnabled: Bool = true
     public var frameHold: Double = 0.5
     public var thumbOutAbove: Double = 0.62
 
@@ -167,6 +155,9 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var glideEnabled: Bool = true
     public var glideLead: Double = 0.5
     public var momentumDecay: Double = 0.4
+
+    // MARK: What each gesture does
+    public var gestures = GestureMap()
 
     public init() {}
 

@@ -114,6 +114,9 @@ final class OutputDriver {
         case .activeChanged:
             momentum = nil
             notify(action)
+
+        case .toggleKeyboard, .recognized:
+            notify(action)
         }
     }
 

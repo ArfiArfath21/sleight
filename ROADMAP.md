@@ -13,9 +13,8 @@
 
 ## Gestures
 
-- **Per-app profiles:** flick = next slide in Keynote, seek in video players, next tab
-  in browsers.
-- **Custom bindings** in Settings: map any gesture to any shortcut.
+- **Custom shortcut** as an action: record any key combination and assign it.
+- **Per-app assignments** (a gesture does X in Keynote, Y elsewhere).
 - **Two-hand rotate** (rotate images, scrub timelines).
 - **Snap-to-target** in pointer mode via the Accessibility API.
 

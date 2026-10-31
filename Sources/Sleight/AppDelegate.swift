@@ -43,7 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlay.showHints = store.showHints
         pipeline.apply(config: store.config)
         pipeline.camera.preferredDeviceID = store.preferredCameraID
-        store.onChange = { [weak self] cfg in self?.pipeline.apply(config: cfg) }
+        overlay.gestures = store.config.gestures
+        store.onChange = { [weak self] cfg in
+            self?.pipeline.apply(config: cfg)
+            self?.overlay.gestures = cfg.gestures
+        }
         pipeline.output.onEvent = { [weak self] action in self?.handle(action) }
 
         modeBar.onKeyboard = { [weak self] in self?.keyboard.toggle() }
@@ -64,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let dir = launchOptions.snapshotDir {
             Snapshots.render(to: URL(fileURLWithPath: dir, isDirectory: true), injector: pipeline.injector,
-                             monitor: pipeline.inputMonitor)
+                             monitor: pipeline.inputMonitor, store: store)
             NSApp.terminate(nil)
             return
         }
@@ -143,8 +147,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func handle(_ action: EngineAction) {
-        practice?.handle(action, natural: store.config.scrollNatural)
-        if let chip = Chip.flash(for: action) { overlay.flash(chip) }
+        practice?.handle(action)
+        if let chip = Chip.flash(for: action, map: store.config.gestures) { overlay.flash(chip) }
         switch action {
         case .modeChanged(let m, _):
             mode = m
@@ -162,6 +166,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             refreshMenu()
         case .mouseUp(.left, _, _):
             if mode == .pointer { showKeyboardIfTextFieldFocused() }
+        case .toggleKeyboard:
+            keyboard.toggle()
         default:
             break
         }
@@ -318,19 +324,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func showGuide() {
-        if guideWindow == nil {
-            guideWindow = GuideWindow.make(onPractice: { [weak self] in
-                self?.guideWindow?.close()
-                self?.showPractice()
-            })
-        }
-        present(guideWindow!)
+        // Rebuilt each time so it shows the current assignments.
+        guideWindow?.close()
+        let window = GuideWindow.make(map: store.config.gestures, onPractice: { [weak self] in
+            self?.guideWindow?.close()
+            self?.showPractice()
+        })
+        guideWindow = window
+        present(window)
     }
 
     @objc func showPractice() {
         if !enabled { setEnabled(true) }
         if practice == nil { practice = PracticeWindowController(pipeline: pipeline) }
-        practice?.open()
+        practice?.open(map: store.config.gestures)
     }
 
     @objc func showPreview() {

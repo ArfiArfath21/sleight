@@ -6,18 +6,20 @@ import SleightBrand
 /// `--snapshots DIR`: renders the UI to PNGs without a camera, for review and the README.
 @MainActor
 enum Snapshots {
-    static func render(to dir: URL, injector: EventInjector, monitor: InputMonitor) {
+    static func render(to dir: URL, injector: EventInjector, monitor: InputMonitor, store: ConfigStore) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let scale: CGFloat = 2
 
         // Gesture chips: hints, confirmations, pointer mode.
+        let map = GestureMap()
         let chips: [Chip] = [
-            .cue(.scroll, progress: 0), .cue(.swipe, progress: 0), .cue(.grab, progress: 0),
-            .cue(.media, progress: 0), .cue(.point, progress: 0.6), .cue(.frame, progress: 0.4),
-            .cue(.curtains, progress: 0), .cue(.clap, progress: 0), Chip.resting, .pointer(progress: 0),
-            Chip.flash(for: .shortcut(.spaceLeft))!, Chip.flash(for: .media(.playPause))!,
-            Chip.flash(for: .activeChanged(true))!,
-        ]
+            Chip.cue(.vee, progress: 0, map: map), Chip.cue(.open, progress: 0, map: map),
+            Chip.cue(.fist, progress: 0, map: map), Chip.cue(.fistSliding, progress: 0, map: map),
+            Chip.cue(.point, progress: 0.6, map: map), Chip.cue(.handsUp, progress: 0.4, map: map),
+            Chip.cue(.curtains, progress: 0, map: map), Chip.resting, .pointer(progress: 0),
+            Chip.flash(for: .recognized(.openSwipeRight), map: map), Chip.flash(for: .recognized(.veeFlickUp), map: map),
+            Chip.flash(for: .activeChanged(true)),
+        ].compactMap { $0 }
         let images = chips.compactMap { ChipRenderer.render($0, scale: scale) }
         let width = (images.map { CGFloat($0.width) / scale }.max() ?? 300) + 80
         let rowH: CGFloat = 62
@@ -70,6 +72,20 @@ enum Snapshots {
         if let img = pr.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff),
            let png = rep.representation(using: .png, properties: [:]) {
             try? png.write(to: dir.appendingPathComponent("practice.png"))
+        }
+
+        // Settings, through a real hosting view (Form controls don't render offscreen otherwise).
+        let host = NSHostingView(rootView: SettingsView(store: store).frame(width: 560, height: 1500))
+        host.appearance = NSAppearance(named: .aqua)
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: 1500)
+        let win = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        win.appearance = NSAppearance(named: .aqua)
+        win.contentView = host
+        host.layoutSubtreeIfNeeded()
+        host.display()
+        if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("settings.png"))
         }
 
         if let png = Brand.iconPNG(pixels: 1024) { try? png.write(to: dir.appendingPathComponent("logo.png")) }

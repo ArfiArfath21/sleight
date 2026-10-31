@@ -12,6 +12,7 @@ final class PracticeModel: ObservableObject {
     @Published var lastHit: String?
     @Published var lastHitAt = Date.distantPast
     @Published var seeing = ""
+    @Published var map = GestureMap()
 
     func hit(_ id: String) {
         counts[id, default: 0] += 1
@@ -44,10 +45,12 @@ final class PracticeWindowController: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func open() {
+    func open(map: GestureMap) {
         model.counts = [:]
         model.lastHit = nil
+        model.map = map
         pipeline.dryRun = true
+        pipeline.setDetectAll(true)
         recording = pipeline.startRecording(prefix: "practice-")
         onOpen?()
         NSApp.activate(ignoringOtherApps: true)
@@ -57,12 +60,13 @@ final class PracticeWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         pipeline.dryRun = false
+        pipeline.setDetectAll(false)
         pipeline.stopRecording()
         onClose?()
     }
 
-    func handle(_ action: EngineAction, natural: Bool) {
-        guard window?.isVisible == true, let id = GestureCatalog.gestureID(for: action, natural: natural) else { return }
+    func handle(_ action: EngineAction) {
+        guard window?.isVisible == true, let id = GestureCatalog.entryID(for: action) else { return }
         model.hit(id)
     }
 
@@ -90,7 +94,9 @@ final class PracticeWindowController: NSWindowController, NSWindowDelegate {
         }
         if !hud.active { parts.append("resting") }
         if hud.mode == .pointer { parts.append("pointer mode") }
-        if let cue = hud.cue { parts.append("ready: \(Chip.cue(cue, progress: 0, active: hud.active).title)") }
+        if let cue = hud.cue, let chip = Chip.cue(cue, progress: 0, active: hud.active, map: model.map) {
+            parts.append("ready: \(chip.title.lowercased())")
+        }
         let text = parts.joined(separator: "  ·  ")
         if text != lastSeeing {
             lastSeeing = text
@@ -122,12 +128,12 @@ struct PracticeView: View {
                     .font(.system(.body, design: .rounded).weight(.medium))
                 if let id = model.lastHit, let g = GestureCatalog.all.first(where: { $0.id == id }),
                    Date().timeIntervalSince(model.lastHitAt) < 3 {
-                    Label("\(g.title.trimmingCharacters(in: .whitespaces)) → \(g.effect)", systemImage: "checkmark.circle.fill")
+                    Label("\(g.title) → \(g.effect(model.map))", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(Color(cgColor: Brand.gold))
                         .font(.headline)
                 }
                 Spacer()
-                Text("Nothing happens on your Mac while this window is open, so try anything. Yellow dots are the joints Sleight sees: if a hand has no skeleton, Sleight can't see it (move it up into view, add light).")
+                Text("Nothing happens on your Mac while this window is open, so try anything; every gesture is recognised here, even ones set to Nothing. Yellow dots are the joints Sleight sees: if a hand has no skeleton, Sleight can't see it (move it up into view, add light).")
                     .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(20)
@@ -152,7 +158,7 @@ struct PracticeList: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color(cgColor: Brand.gold))
                     ForEach(GestureCatalog.all.filter { $0.group == group }) { g in
-                        GestureRow(info: g, count: model.counts[g.id] ?? 0,
+                        GestureRow(info: g, effect: g.effect(model.map), count: model.counts[g.id] ?? 0,
                                    flash: model.lastHit == g.id && Date().timeIntervalSince(model.lastHitAt) < 1.5)
                     }
                 }
@@ -163,6 +169,7 @@ struct PracticeList: View {
 
 private struct GestureRow: View {
     let info: GestureInfo
+    let effect: String
     let count: Int
     let flash: Bool
 
@@ -171,7 +178,7 @@ private struct GestureRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(info.title).font(.headline)
-                    Text("→ \(info.effect)").foregroundStyle(.secondary)
+                    Text("→ \(effect)").foregroundStyle(effect == "Nothing" ? Color.secondary.opacity(0.6) : Color.secondary)
                 }
                 Text(info.how).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }

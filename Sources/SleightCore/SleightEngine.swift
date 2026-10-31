@@ -21,6 +21,10 @@ public final class SleightEngine {
     public let twoHands: TwoHandGestures
     public private(set) var mode: Mode = .command
     public private(set) var active = true
+    /// Recognise every gesture, assigned or not, and report it (Practice window).
+    public var detectAll = false {
+        didSet { command.detectAll = detectAll; twoHands.detectAll = detectAll }
+    }
 
     public init(config: SleightConfig = .default, screens: ScreenLayout = .fallback) {
         self.config = config
@@ -51,8 +55,20 @@ public final class SleightEngine {
         }
 
         let two = twoHands.step(tracks: tracks, time: t)
-        if two.events.contains(.doubleClap) || two.events.contains(.handsUp) {
+        var twoHandFired: [EngineAction] = []
+        for e in two.events {
+            let g: GestureID
+            switch e {
+            case .curtains: g = .curtains
+            case .frame: g = .frame
+            case .doubleClap: g = .doubleClap
+            case .handsUp, .clap: continue
+            }
+            twoHandFired += command.fire(g, speed: nil)
+        }
+        if two.events.contains(.handsUp) || wantsRestToggle(twoHandFired) {
             actions += setActive(!active, time: t)
+            if !active { actions += twoHandFired.filter { if case .recognized = $0 { return true }; return false } }
         }
 
         guard active else {
@@ -64,13 +80,7 @@ public final class SleightEngine {
             return EngineOutput(actions: actions, hud: hud, pose: pose)
         }
 
-        for e in two.events {
-            switch e {
-            case .curtains: actions.append(.shortcut(.showDesktop))
-            case .frame: actions.append(.shortcut(.screenshot))
-            case .clap, .doubleClap, .handsUp: break
-            }
-        }
+        actions += twoHandFired
         // A forming two-hand gesture outranks anything one hand might be doing.
         if two.busy || !two.events.isEmpty {
             actions += command.cancel()
@@ -83,6 +93,11 @@ public final class SleightEngine {
         case .command:
             let r = command.step(tracks: tracks, time: t, hud: &hud)
             actions += r.actions
+            if wantsRestToggle(r.actions) {
+                actions += setActive(false, time: t)
+                hud.active = false
+                return EngineOutput(actions: actions, hud: hud, pose: pose)
+            }
             if let hand = r.enterPointer {
                 pointer.enter(hand: hand, cursor: input.systemCursor, time: t)
                 mode = .pointer
@@ -90,8 +105,9 @@ public final class SleightEngine {
                 actions.append(.modeChanged(.pointer, .gesture))
             }
         case .pointer:
-            let r = pointer.step(tracks: tracks, time: t, aspect: input.aspect,
-                                 flickActions: command.flickActions, hud: &hud)
+            let r = pointer.step(tracks: tracks, time: t, aspect: input.aspect, veeFlick: { [command] hand, flicks in
+                command.veeFlick(hand, time: t, settle: 0.1, flicks: &flicks, only: [.up, .down])
+            }, hud: &hud)
             actions += r.actions
             if let reason = r.exit {
                 actions += pointer.exit()
@@ -106,6 +122,11 @@ public final class SleightEngine {
         if mode == .command { hud.cursor = input.systemCursor }
         if tracks.visible.isEmpty, tracks.rejectedSmall { hud.warning = .tooFar }
         return EngineOutput(actions: actions, hud: hud, pose: pose)
+    }
+
+    /// A recognised gesture the user assigned to "Rest / wake".
+    private func wantsRestToggle(_ actions: [EngineAction]) -> Bool {
+        actions.contains { if case .recognized(let g) = $0 { return config.gestures[g] == .restWake }; return false }
     }
 
     /// Active ↔ resting, from a gesture or from outside (menu, hotkey).

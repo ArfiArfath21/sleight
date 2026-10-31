@@ -16,15 +16,25 @@ public enum ModeChangeReason: String, Codable, Sendable {
 /// default (Mission Control shortcuts) or what every app understands.
 public enum Shortcut: String, Codable, Sendable {
     case back, forward            // ⌘[ ⌘]
+    case nextTab, previousTab     // ⌃⇥ ⌃⇧⇥
+    case newTab, reopenTab        // ⌘T ⌘⇧T
     case spaceLeft, spaceRight    // ⌃← ⌃→
     case missionControl           // ⌃↑
     case appExpose                // ⌃↓
     case showDesktop              // F11
+    case hideApp, minimize        // ⌘H ⌘M
+    case fullScreen               // ⌃⌘F
+    case zoomIn, zoomOut          // ⌘= ⌘-
+    case arrowLeft, arrowRight, arrowUp, arrowDown
     case screenshot               // ⌘⇧3
+    case screenshotSelection      // ⌘⇧4
+    case screenshotTool           // ⌘⇧5
+    case spotlight                // ⌘Space
+    case lockScreen               // ⌃⌘Q
 }
 
 public enum MediaKey: String, Codable, Sendable {
-    case playPause, volumeUp, volumeDown, next, previous
+    case playPause, volumeUp, volumeDown, next, previous, mute, brightnessUp, brightnessDown
 }
 
 /// ⌘-Tab, driven step by step: begin holds ⌘ and shows the switcher.
@@ -49,6 +59,9 @@ public enum EngineAction: Equatable, Sendable {
     case modeChanged(Mode, ModeChangeReason)
     /// Gestures switched on (active) or off (resting, camera still watching).
     case activeChanged(Bool)
+    case toggleKeyboard
+    /// A gesture was recognised (assigned or not). Only the Practice window listens.
+    case recognized(GestureID)
 }
 
 /// What the HUD should show. Cheap to compute every frame.
@@ -61,19 +74,20 @@ public struct HUDState: Equatable, Sendable {
         case tooFar, lowLight, lowFPS, nearEdge
     }
 
-    /// What the hands in view are about to do, in command mode.
+    /// Which gesture family the hands in view are ready for, in command mode.
+    /// The HUD fills in what each one does from the user's assignments.
     public enum Cue: String, Sendable {
-        case swipe       // open palm: desktops / Mission Control
-        case scroll      // ✌️: flick to scroll, sideways for back/forward
-        case media       // 🤏: tap play/pause, slide volume, flick tracks
-        case volume      // 🤏 sliding vertically
-        case grab        // ✊: slide to switch apps
-        case apps        // ✊ sliding: app switcher open
-        case point       // ☝️: hold for pointer mode
-        case curtains    // 🖐🖐 held together: part them to show the desktop
-        case frame       // two "L" hands: hold to take a screenshot
-        case clap        // first clap heard: clap again
-        case handsUp     // both hands raised and still: hold to rest / wake
+        case vee            // ✌️ ready to flick
+        case open           // ✋ ready to swipe
+        case ok             // 👌 held
+        case okSlideVertical, okSlideSideways
+        case fist           // ✊ held, ready to slide
+        case fistSliding
+        case point          // ☝️: hold for pointer mode
+        case curtains       // 🖐🖐 held together: part them
+        case frame          // two "L" hands: hold
+        case clap           // first clap heard: clap again
+        case handsUp        // both hands raised and still: hold to rest / wake
     }
 
     public var mode: Mode = .command
