@@ -132,7 +132,7 @@ final class SwipeTests: XCTestCase {
     }
 }
 
-final class PinchSliderTests: XCTestCase {
+final class MediaRemoteTests: XCTestCase {
     func testPinchTapPlaysOrPauses() {
         let sim = Sim()
         var h = SyntheticHand.relaxed(at: Vec2(0.65, 0.65))
@@ -141,7 +141,6 @@ final class PinchSliderTests: XCTestCase {
         sim.unpinch(&h)
         sim.hold(h, for: 0.2)
         XCTAssertEqual(sim.media, [.playPause])
-        XCTAssertTrue(sim.switcher.isEmpty)
     }
 
     func testLongPinchWithoutSlidingDoesNothing() {
@@ -152,31 +151,6 @@ final class PinchSliderTests: XCTestCase {
         sim.hold(h, for: 1.0)
         sim.unpinch(&h)
         XCTAssertTrue(sim.effects.isEmpty)
-    }
-
-    func testPinchSlideSidewaysDrivesAppSwitcher() {
-        let sim = Sim()
-        var h = SyntheticHand.relaxed(at: Vec2(0.45, 0.65))
-        sim.hold(h, for: 0.3)
-        sim.pinch(&h)
-        sim.move(&h, by: Vec2(0.25, 0), over: 0.5)
-        sim.hold(h, for: 0.2)
-        sim.unpinch(&h)
-        XCTAssertEqual(sim.switcher, [.begin, .next, .next, .commit])
-        XCTAssertTrue(sim.media.isEmpty, "sliding is not a tap")
-    }
-
-    func testSlidingBackStepsBackwards() {
-        let sim = Sim()
-        var h = SyntheticHand.relaxed(at: Vec2(0.45, 0.65))
-        sim.hold(h, for: 0.3)
-        sim.pinch(&h)
-        sim.move(&h, by: Vec2(0.2, 0), over: 0.4)
-        sim.move(&h, by: Vec2(-0.12, 0), over: 0.4)
-        sim.unpinch(&h)
-        XCTAssertEqual(sim.switcher.first, .begin)
-        XCTAssertTrue(sim.switcher.contains(.previous), "\(sim.switcher)")
-        XCTAssertEqual(sim.switcher.last, .commit)
     }
 
     func testPinchSlideVerticalChangesVolume() {
@@ -197,12 +171,76 @@ final class PinchSliderTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(sim.media.count, 2)
     }
 
-    func testLosingTheHandMidSwitchCancelsSafely() {
+    func testPinchSlideSidewaysSkipsOneTrack() {
         let sim = Sim()
         var h = SyntheticHand.relaxed(at: Vec2(0.45, 0.65))
         sim.hold(h, for: 0.3)
         sim.pinch(&h)
-        sim.move(&h, by: Vec2(0.15, 0), over: 0.3)
+        sim.move(&h, by: Vec2(0.25, 0), over: 0.4)
+        sim.unpinch(&h)
+        XCTAssertEqual(sim.media, [.next])
+        sim.clear()
+        sim.hold(h, for: 0.3)
+        sim.pinch(&h)
+        sim.move(&h, by: Vec2(-0.25, 0), over: 0.4)
+        sim.unpinch(&h)
+        XCTAssertEqual(sim.media, [.previous])
+        XCTAssertTrue(sim.switcher.isEmpty, "media and apps are separate families")
+    }
+}
+
+final class GrabSwitcherTests: XCTestCase {
+    func grab(_ sim: Sim, _ h: inout SyntheticHand) {
+        sim.move(&h, by: .zero, over: 0.12) { hand, f in hand.fingers = hand.fingers.map { _ in 1 - f } }
+        sim.hold(h, for: 0.2)
+    }
+
+    func release(_ sim: Sim, _ h: inout SyntheticHand) {
+        sim.move(&h, by: .zero, over: 0.12) { hand, f in hand.fingers = hand.fingers.map { _ in f } }
+        sim.hold(h, for: 0.1)
+    }
+
+    func testGrabSlideReleaseSwitchesApps() {
+        let sim = Sim()
+        var h = SyntheticHand.openPalm(at: Vec2(0.4, 0.65))
+        sim.hold(h, for: 0.3)
+        grab(sim, &h)
+        sim.move(&h, by: Vec2(0.3, 0), over: 0.6)
+        release(sim, &h)
+        XCTAssertEqual(sim.switcher.first, .begin)
+        XCTAssertTrue(sim.switcher.contains(.next))
+        XCTAssertEqual(sim.switcher.last, .commit)
+        XCTAssertTrue(sim.shortcuts.isEmpty, "opening the hand must not also swipe")
+    }
+
+    func testSlidingBackStepsBackwards() {
+        let sim = Sim()
+        var h = SyntheticHand.openPalm(at: Vec2(0.4, 0.65))
+        sim.hold(h, for: 0.3)
+        grab(sim, &h)
+        sim.move(&h, by: Vec2(0.25, 0), over: 0.5)
+        sim.move(&h, by: Vec2(-0.12, 0), over: 0.4)
+        release(sim, &h)
+        XCTAssertTrue(sim.switcher.contains(.previous), "\(sim.switcher)")
+        XCTAssertEqual(sim.switcher.last, .commit)
+    }
+
+    func testFistWithoutSlidingDoesNothing() {
+        let sim = Sim()
+        var h = SyntheticHand.openPalm(at: Vec2(0.5, 0.65))
+        sim.hold(h, for: 0.3)
+        grab(sim, &h)
+        sim.hold(h, for: 1.0)
+        release(sim, &h)
+        XCTAssertTrue(sim.effects.isEmpty)
+    }
+
+    func testLosingTheHandMidSwitchCancels() {
+        let sim = Sim()
+        var h = SyntheticHand.openPalm(at: Vec2(0.4, 0.65))
+        sim.hold(h, for: 0.3)
+        grab(sim, &h)
+        sim.move(&h, by: Vec2(0.2, 0), over: 0.4)
         sim.empty(for: 0.6)
         XCTAssertEqual(sim.switcher.first, .begin)
         XCTAssertEqual(sim.switcher.last, .cancel, "⌘ must never be left held down")
@@ -210,10 +248,10 @@ final class PinchSliderTests: XCTestCase {
 
     func testTypingCancelsSwitcher() {
         let sim = Sim()
-        var h = SyntheticHand.relaxed(at: Vec2(0.45, 0.65))
+        var h = SyntheticHand.openPalm(at: Vec2(0.4, 0.65))
         sim.hold(h, for: 0.3)
-        sim.pinch(&h)
-        sim.move(&h, by: Vec2(0.15, 0), over: 0.3)
+        grab(sim, &h)
+        sim.move(&h, by: Vec2(0.2, 0), over: 0.4)
         sim.lastRealInput = sim.time
         sim.step(h)
         XCTAssertEqual(sim.switcher.last, .cancel)
@@ -251,52 +289,142 @@ final class ModeTests: XCTestCase {
     }
 }
 
-final class TwoHandTests: XCTestCase {
-    func testSpreadingTwoOpenHandsZoomsIn() {
-        let sim = Sim()
-        var l = SyntheticHand.openPalm(at: Vec2(0.5, 0.65))
-        var r = SyntheticHand.openPalm(at: Vec2(0.8, 0.65))
+/// Two hands moving together and apart, frame by frame.
+private func twoHands(_ sim: Sim, _ l: inout SyntheticHand, _ r: inout SyntheticHand,
+                      to lx: Double, _ rx: Double, over seconds: Double, dropAtEnd: Bool = false) {
+    let l0 = l.wrist.x, r0 = r.wrist.x
+    let n = max(Int((seconds * sim.fps).rounded()), 1)
+    for i in 1...n {
+        let f = Double(i) / Double(n)
+        l.wrist.x = lerp(l0, lx, f)
+        r.wrist.x = lerp(r0, rx, f)
+        sim.step(dropAtEnd && i == n ? [l] : [l, r])
+    }
+}
+
+final class ClapTests: XCTestCase {
+    func clap(_ sim: Sim, _ l: inout SyntheticHand, _ r: inout SyntheticHand, merge: Bool = false) {
+        twoHands(sim, &l, &r, to: 0.6, 0.72, over: 0.1, dropAtEnd: merge)   // rush together
+        if merge { sim.hold([l], for: 0.07) }
+        twoHands(sim, &l, &r, to: 0.35, 0.97, over: 0.17)                 // apart again
+    }
+
+    func hands() -> (SyntheticHand, SyntheticHand) {
+        var l = SyntheticHand.openPalm(at: Vec2(0.35, 0.65))
         l.chirality = .left
-        sim.hold([l, r], for: 0.3)
-        for i in 1...12 {
-            let f = Double(i) / 12
-            l.wrist = Vec2(0.5 - 0.25 * f, 0.65)
-            r.wrist = Vec2(0.8 + 0.25 * f, 0.65)
-            sim.step([l, r])
-        }
-        sim.hold([l, r], for: 0.2)
-        XCTAssertFalse(sim.shortcuts.isEmpty)
-        XCTAssertTrue(sim.shortcuts.allSatisfy { $0 == .zoomIn }, "\(sim.shortcuts)")
+        return (l, SyntheticHand.openPalm(at: Vec2(0.97, 0.65)))
     }
 
-    func testSqueezingZoomsOut() {
+    func testDoubleClapRestsAndWakes() {
         let sim = Sim()
-        var l = SyntheticHand.openPalm(at: Vec2(0.25, 0.65))
-        var r = SyntheticHand.openPalm(at: Vec2(1.05, 0.65))
+        var (l, r) = hands()
         sim.hold([l, r], for: 0.3)
-        for i in 1...12 {
-            let f = Double(i) / 12
-            l.wrist = Vec2(0.25 + 0.2 * f, 0.65)
-            r.wrist = Vec2(1.05 - 0.2 * f, 0.65)
-            sim.step([l, r])
-        }
-        XCTAssertFalse(sim.shortcuts.isEmpty)
-        XCTAssertTrue(sim.shortcuts.allSatisfy { $0 == .zoomOut })
+        clap(sim, &l, &r)
+        XCTAssertTrue(sim.engine.active, "one clap is not enough")
+        XCTAssertEqual(sim.lastHUD.cue, .clap)
+        clap(sim, &l, &r)
+        XCTAssertFalse(sim.engine.active)
+        XCTAssertEqual(sim.all.filter { if case .activeChanged = $0 { return true }; return false }, [.activeChanged(false)])
+        sim.hold([l, r], for: 1.2)
+        clap(sim, &l, &r)
+        clap(sim, &l, &r)
+        XCTAssertTrue(sim.engine.active)
     }
 
-    func testSecondHandDoesNotStealAGestureInProgress() {
+    func testClapWhereTrackerMergesTheHandsStillCounts() {
         let sim = Sim()
-        var h = SyntheticHand.relaxed(at: Vec2(0.45, 0.65))
-        let idle = SyntheticHand.fist(at: Vec2(1.1, 0.7))
-        sim.hold([h, idle], for: 0.3)
-        sim.move(&h, by: .zero, over: 0.1) { hand, f in hand.pinch = f; hand.fingers[0] = lerp(1, 0.6, f) }
-        for i in 1...15 {
-            h.wrist = Vec2(0.45 + 0.25 * Double(i) / 15, 0.65)
-            sim.step([h, idle])
+        var (l, r) = hands()
+        sim.hold([l, r], for: 0.3)
+        clap(sim, &l, &r, merge: true)
+        clap(sim, &l, &r, merge: true)
+        XCTAssertFalse(sim.engine.active)
+    }
+
+    func testSlowlyBringingHandsTogetherIsNotAClap() {
+        let sim = Sim()
+        var (l, r) = hands()
+        sim.hold([l, r], for: 0.3)
+        for _ in 0..<3 {
+            twoHands(sim, &l, &r, to: 0.6, 0.72, over: 0.8)
+            twoHands(sim, &l, &r, to: 0.35, 0.97, over: 0.8)
         }
-        sim.move(&h, by: .zero, over: 0.1) { hand, f in hand.pinch = 1 - f; hand.fingers[0] = lerp(0.6, 1, f) }
-        XCTAssertEqual(sim.switcher.first, .begin)
-        XCTAssertEqual(sim.switcher.last, .commit)
+        XCTAssertTrue(sim.engine.active)
+        XCTAssertTrue(sim.effects.isEmpty, "\(sim.effects)")
+    }
+
+    func testClapsTooFarApartInTimeDoNothing() {
+        let sim = Sim()
+        var (l, r) = hands()
+        sim.hold([l, r], for: 0.3)
+        clap(sim, &l, &r)
+        sim.hold([l, r], for: 1.5)
+        clap(sim, &l, &r)
+        XCTAssertTrue(sim.engine.active)
+    }
+
+    func testRestingIgnoresEverythingButTheClap() {
+        let sim = Sim()
+        _ = sim.engine.setActive(false, time: sim.time)
+        var v = SyntheticHand.vee(at: Vec2(0.65, 0.65))
+        sim.hold(v, for: 0.3)
+        sim.move(&v, by: Vec2(0, -0.15), over: 0.15)
+        var p = SyntheticHand.point(at: Vec2(0.65, 0.6))
+        sim.hold(p, for: 1.0)
+        sim.move(&p, by: Vec2(0.3, 0), over: 0.15)
+        XCTAssertTrue(sim.effects.isEmpty)
+        XCTAssertEqual(sim.mode, .command)
+        XCTAssertFalse(sim.lastHUD.active)
+    }
+
+    func testRestingFromPointerModeExitsIt() {
+        let sim = Sim()
+        _ = sim.enterPointer()
+        _ = sim.engine.setActive(false, time: sim.time)
+        XCTAssertEqual(sim.mode, .command)
+    }
+}
+
+final class CurtainsTests: XCTestCase {
+    func testPartingTheCurtainsShowsDesktop() {
+        let sim = Sim()
+        var l = SyntheticHand.openPalm(at: Vec2(0.55, 0.65))
+        var r = SyntheticHand.openPalm(at: Vec2(0.80, 0.65))
+        sim.hold([l, r], for: 0.5)
+        XCTAssertEqual(sim.lastHUD.cue, .curtains)
+        twoHands(sim, &l, &r, to: 0.2, 1.15, over: 0.3)
+        sim.hold([l, r], for: 0.3)
+        XCTAssertEqual(sim.shortcuts, [.showDesktop])
+    }
+
+    func testHandsThatWereNeverTogetherDoNothing() {
+        let sim = Sim()
+        var l = SyntheticHand.openPalm(at: Vec2(0.35, 0.65))
+        var r = SyntheticHand.openPalm(at: Vec2(1.0, 0.65))
+        sim.hold([l, r], for: 0.4)
+        twoHands(sim, &l, &r, to: 0.15, 1.2, over: 0.3)
+        XCTAssertFalse(sim.shortcuts.contains(.showDesktop))
+    }
+}
+
+final class FrameTests: XCTestCase {
+    func testFramingWithBothHandsTakesAScreenshot() {
+        let sim = Sim()
+        var l = SyntheticHand.frameL(at: Vec2(0.4, 0.7))
+        l.flipped = true
+        let r = SyntheticHand.frameL(at: Vec2(0.95, 0.7))
+        sim.hold([l, r], for: 0.3)
+        XCTAssertEqual(sim.lastHUD.cue, .frame)
+        sim.hold([l, r], for: 0.4)
+        XCTAssertEqual(sim.shortcuts, [.screenshot])
+        XCTAssertEqual(sim.mode, .command, "two pointing hands must not enter pointer mode")
+        sim.hold([l, r], for: 1.0)
+        XCTAssertEqual(sim.shortcuts, [.screenshot], "one shot per frame")
+    }
+
+    func testOneLHandIsJustPointing() {
+        let sim = Sim()
+        sim.hold(SyntheticHand.frameL(at: Vec2(0.65, 0.6)), for: 0.8)
+        XCTAssertFalse(sim.shortcuts.contains(.screenshot))
     }
 }
 
@@ -314,7 +442,8 @@ final class SafetyTests: XCTestCase {
         let sim = Sim()
         var f = SyntheticHand.fist(at: Vec2(0.65, 0.6))
         sim.hold(f, for: 0.3)
-        sim.move(&f, by: Vec2(0.3, -0.2), over: 0.15)
+        // Vertical fist motion means nothing (sideways is the app switcher).
+        sim.move(&f, by: Vec2(0.02, -0.25), over: 0.15)
         var o = SyntheticHand.openPalm(at: Vec2(0.65, 0.6))
         o.fingers = [1, 0, 0, 1]
         sim.hold(o, for: 0.3)

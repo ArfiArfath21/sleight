@@ -136,8 +136,8 @@ final class EventInjector {
         case .spaceRight: key(KeyCode.right, flags: Self.arrowFlags.union(.maskControl))
         case .missionControl: key(KeyCode.up, flags: Self.arrowFlags.union(.maskControl))
         case .appExpose: key(KeyCode.down, flags: Self.arrowFlags.union(.maskControl))
-        case .zoomIn: key(KeyCode.equal, flags: .maskCommand)
-        case .zoomOut: key(KeyCode.minus, flags: .maskCommand)
+        case .showDesktop: key(KeyCode.f11, flags: .maskSecondaryFn)
+        case .screenshot: key(KeyCode.three, flags: [.maskCommand, .maskShift])
         }
     }
 
@@ -199,4 +199,6 @@ enum KeyCode {
     static let equal: CGKeyCode = 24
     static let minus: CGKeyCode = 27
     static let forwardDelete: CGKeyCode = 117
+    static let f11: CGKeyCode = 103
+    static let three: CGKeyCode = 20
 }

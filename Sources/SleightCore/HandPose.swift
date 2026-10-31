@@ -26,6 +26,14 @@ public struct HandPose: Sendable {
     public let orientation: Double
     /// Mean joint confidence (missing joints count as 0).
     public let confidence: Double
+    /// Thumb tip to index knuckle, in hand scales. ~0.3 tucked, ~0.8 stuck out.
+    public let thumbReach: Double
+
+    /// Index up, other fingers folded, thumb out sideways: an "L", half of a
+    /// two-handed camera frame.
+    public func isFrameL(config: SleightConfig) -> Bool {
+        isPoint && thumbReach > config.thumbOutAbove
+    }
 
     public var extendedCount: Int { extended.filter { $0 }.count }
     public var isOpenPalm: Bool { extended.allSatisfy { $0 } }
@@ -123,10 +131,11 @@ public struct HandPose: Sendable {
         }
 
         let orientation = cross(indexMCP - wrist, littleMCP - wrist) / (scale * scale)
+        let thumbReach = distance(thumbTip, indexMCP) / scale
 
         return HandPose(frame: frame, scale: scale, anchor: anchor, wrist: wrist,
                         extensionRatio: ratios, extended: ext,
                         pinchIndex: pinchIndex, pinchMiddle: pinchMiddle,
-                        orientation: orientation, confidence: meanConfidence)
+                        orientation: orientation, confidence: meanConfidence, thumbReach: thumbReach)
     }
 }

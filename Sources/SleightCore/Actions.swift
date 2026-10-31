@@ -9,7 +9,7 @@ public enum MouseButton: String, Codable, Sendable { case left, right }
 public enum Mode: String, Codable, Sendable { case command, pointer }
 
 public enum ModeChangeReason: String, Codable, Sendable {
-    case gesture, lost, rested, flipped, userInput, manual
+    case gesture, lost, rested, flipped, userInput, manual, resting
 }
 
 /// Keyboard shortcuts the gestures trigger. Kept to what macOS ships enabled by
@@ -19,7 +19,8 @@ public enum Shortcut: String, Codable, Sendable {
     case spaceLeft, spaceRight    // ⌃← ⌃→
     case missionControl           // ⌃↑
     case appExpose                // ⌃↓
-    case zoomIn, zoomOut          // ⌘= ⌘-
+    case showDesktop              // F11
+    case screenshot               // ⌘⇧3
 }
 
 public enum MediaKey: String, Codable, Sendable {
@@ -46,6 +47,8 @@ public enum EngineAction: Equatable, Sendable {
     case media(MediaKey)
     case switcher(SwitcherStep)
     case modeChanged(Mode, ModeChangeReason)
+    /// Gestures switched on (active) or off (resting, camera still watching).
+    case activeChanged(Bool)
 }
 
 /// What the HUD should show. Cheap to compute every frame.
@@ -58,18 +61,23 @@ public struct HUDState: Equatable, Sendable {
         case tooFar, lowLight, lowFPS, nearEdge
     }
 
-    /// What a raised hand is currently "holding", in command mode.
+    /// What the hands in view are about to do, in command mode.
     public enum Cue: String, Sendable {
-        case swipe       // open palm: swipe for desktops / Mission Control
-        case scroll      // vee: flick to scroll, sideways for back/forward
-        case pinch       // pinched: release = play/pause, slide = apps or volume
-        case apps        // pinch sliding sideways: app switcher
-        case volume      // pinch sliding vertically: volume
-        case point       // pointing: hold to enter pointer mode
-        case zoom        // two open hands
+        case swipe       // open palm: desktops / Mission Control
+        case scroll      // ✌️: flick to scroll, sideways for back/forward
+        case media       // 🤏: tap play/pause, slide volume, flick tracks
+        case volume      // 🤏 sliding vertically
+        case grab        // ✊: slide to switch apps
+        case apps        // ✊ sliding: app switcher open
+        case point       // ☝️: hold for pointer mode
+        case curtains    // 🖐🖐 held together: part them to show the desktop
+        case frame       // two "L" hands: hold to take a screenshot
+        case clap        // first clap heard: clap again
     }
 
     public var mode: Mode = .command
+    /// false = resting: watching only for the wake clap.
+    public var active = true
     public var handsVisible = 0
     public var cue: Cue?
     /// 0…1 for hold-to-trigger gestures (point → pointer, fist → exit).

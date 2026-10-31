@@ -195,7 +195,7 @@ final class KeyboardView: NSView {
         NSColor(white: 1, alpha: 0.28).setFill()
         NSBezierPath(roundedRect: NSRect(x: bounds.midX - hw / 2, y: 9, width: hw, height: 5), xRadius: 2.5, yRadius: 2.5).fill()
 
-        let accent = NSColor(cgColor: Brand.cyan)!
+        let accent = NSColor(cgColor: Brand.gold)!
         let shifted = isOn(.shift)
         for (i, (k, r)) in layout.enumerated() {
             var modState: ModState = .off

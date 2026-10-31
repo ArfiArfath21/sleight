@@ -62,6 +62,13 @@ final class Pipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         shared.clearOutputCursor()
     }
 
+    /// Active ↔ resting (camera keeps running).
+    func setActive(_ on: Bool) {
+        captureQueue.async { [self] in
+            output.handle(engine.setActive(on, time: CACurrentMediaTime()), frameInterval: 0)
+        }
+    }
+
     /// Switch between command and pointer mode (menu / hotkey / mode bar).
     func setMode(_ mode: Mode) {
         let cursor = EventInjector.currentCursor()
@@ -148,7 +155,7 @@ final class Pipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
         var hud = out.hud
         let fps = fpsStats.mean
-        if hud.warning == nil, hud.handsVisible > 0 || hud.mode == .pointer {
+        if hud.active, hud.warning == nil, hud.handsVisible > 0 || hud.mode == .pointer {
             if luma < 40 { hud.warning = .lowLight } else if fps > 0, fps < camera.activeFPS * 0.7 { hud.warning = .lowFPS }
         }
         shared.setFrame(hud: hud, hands: hands, pose: out.pose, aspect: aspect)

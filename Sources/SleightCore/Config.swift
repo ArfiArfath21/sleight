@@ -76,22 +76,43 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     /// ...and the opposite direction (the return stroke) after this long.
     public var flickReturnGap: Double = 0.6
 
-    // MARK: Command mode: pinch slider
+    // MARK: Command mode: pinch = media remote
     /// Pinch released within this time without sliding = play/pause.
     public var pinchTapMax: Double = 0.45
-    /// Slide this far (hs) to choose an axis: sideways = apps, vertical = volume.
+    /// Slide this far (hs) to choose: vertical = volume, sideways = next/previous track.
     public var pinchAxisLock: Double = 0.3
-    public var appStep: Double = 0.45
     public var volumeStep: Double = 0.2
+    public var trackSkipEnabled: Bool = true
+
+    // MARK: Command mode: fist = grab the app switcher
+    public var grabEnabled: Bool = true
+    /// Slide this far (hs) with a fist before the switcher opens.
+    public var grabLock: Double = 0.35
+    public var appStep: Double = 0.45
 
     // MARK: Command mode: point to enter pointer mode
     public var pointHoldTime: Double = 0.45
     public var pointMaxSpeed: Double = 1.0
 
-    // MARK: Command mode: two-hand zoom
-    public var zoomEnabled: Bool = true
-    /// Spread or squeeze the hands by this ratio per zoom step.
-    public var zoomStepRatio: Double = 1.22
+    // MARK: Two hands
+    /// Double clap toggles active / resting.
+    public var clapEnabled: Bool = true
+    /// Hands must close faster than this (hs/s) for a clap...
+    public var clapApproachSpeed: Double = 5.0
+    /// ...and meet (palms closer than this, hs) or merge into one detection.
+    public var clapContactDistance: Double = 1.4
+    /// Second clap must follow the first within this window.
+    public var doubleClapMin: Double = 0.12
+    public var doubleClapMax: Double = 0.9
+    /// Part the curtains: open hands held together, then swept apart.
+    public var curtainsEnabled: Bool = true
+    public var curtainsTogether: Double = 2.6
+    public var curtainsHold: Double = 0.25
+    public var curtainsSpread: Double = 2.2
+    /// Frame: both hands in an "L", held this long.
+    public var frameEnabled: Bool = true
+    public var frameHold: Double = 0.5
+    public var thumbOutAbove: Double = 0.62
 
     // MARK: Pointer mode
     public var mappingMode: MappingMode = .relative

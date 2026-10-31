@@ -19,13 +19,21 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("Gestures") {
+            Section("Everyday gestures") {
+                Toggle("✌️ Flick sideways for back / forward", isOn: $store.config.backForwardEnabled)
                 Toggle("✋ Swipe left/right for desktops, up for Mission Control", isOn: $store.config.swipesEnabled)
                 Toggle("✋ Swipe down for app windows (Exposé)", isOn: $store.config.swipeDownEnabled)
-                Toggle("✌️ Flick sideways for back / forward", isOn: $store.config.backForwardEnabled)
-                Toggle("👐 Two hands to zoom", isOn: $store.config.zoomEnabled)
+                Toggle("✊ Grab and slide to switch apps", isOn: $store.config.grabEnabled)
+                Toggle("🤏 Slide sideways to skip tracks", isOn: $store.config.trackSkipEnabled)
                 Toggle("Natural scrolling", isOn: $store.config.scrollNatural)
                 Toggle("Show gesture hints", isOn: $store.showHints)
+            }
+            Section("Two hands") {
+                Toggle("👏👏 Double clap to rest / wake", isOn: $store.config.clapEnabled)
+                Toggle("🖐🖐 Part the curtains to show the desktop", isOn: $store.config.curtainsEnabled)
+                Toggle("Frame with both hands to take a screenshot", isOn: $store.config.frameEnabled)
+                Tunable("Clap speed needed", value: $store.config.clapApproachSpeed, range: 2...12, format: "%.1f hand/s",
+                        help: "Lower if claps are missed; raise if they fire by accident.")
             }
             Section("Sensitivity") {
                 Tunable("Swipe speed needed", value: $store.config.swipeMinSpeed, range: 2...10, format: "%.1f hand/s",

@@ -99,11 +99,11 @@ final class BarButton: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let path = NSBezierPath(roundedRect: bounds, xRadius: 19, yRadius: 19)
-        (pressed ? NSColor(cgColor: Brand.cyan)!.withAlphaComponent(0.85)
+        (pressed ? NSColor(cgColor: Brand.gold)!.withAlphaComponent(0.85)
                  : NSColor(white: 1, alpha: hovered ? 0.2 : 0.09)).setFill()
         path.fill()
         if hovered && !pressed {
-            NSColor(cgColor: Brand.cyan)!.setStroke()
+            NSColor(cgColor: Brand.gold)!.setStroke()
             path.lineWidth = 1.5
             path.stroke()
         }

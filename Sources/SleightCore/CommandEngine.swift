@@ -1,65 +1,70 @@
 import Foundation
 
-/// The default mode: a handful of coarse gestures that work wherever your hand
-/// happens to be. The hand's *shape* chooses the family, its *motion* chooses
-/// the action; nothing depends on aiming.
+/// The default mode: a handful of gestures grouped by what you are doing, not by
+/// hand shape. Nothing depends on where the hand is, only on its shape and motion.
 ///
-/// | Shape          | Motion                 | Action                                   |
-/// |----------------|------------------------|------------------------------------------|
-/// | ✌️ two fingers  | flick up / down        | scroll, with momentum (flick again to go further) |
-/// | ✌️ two fingers  | flick left / right     | back / forward                           |
-/// | ✋ open hand    | swipe left / right     | switch desktop / full-screen app         |
-/// | ✋ open hand    | swipe up               | Mission Control                          |
-/// | 🤏 pinch        | tap (pinch + release)  | play / pause                             |
-/// | 🤏 pinch        | hold + slide sideways  | app switcher (⌘-Tab), release to pick    |
-/// | 🤏 pinch        | hold + slide up / down | volume                                   |
-/// | ☝️ point        | hold still             | pointer mode                             |
-/// | 👐 both hands   | spread / squeeze       | zoom in / out                            |
+/// | Task      | Gesture                              | Action                          |
+/// |-----------|--------------------------------------|---------------------------------|
+/// | Reading   | ✌️ flick up / down                    | scroll, with momentum           |
+/// |           | ✌️ flick right / left                 | back / forward                  |
+/// | Windows   | ✋ swipe right / left                 | switch desktop                  |
+/// |           | ✋ swipe up                           | Mission Control                 |
+/// |           | ✊ grab, slide sideways, open hand    | switch app (⌘-Tab)              |
+/// | Media     | 🤏 tap                                | play / pause                    |
+/// |           | 🤏 hold + slide up / down             | volume                          |
+/// |           | 🤏 slide right / left                 | next / previous track           |
+/// | Aiming    | ☝️ hold                               | pointer mode                    |
+///
+/// Two-hand gestures (clap, curtains, frame) live in `TwoHandGestures`.
 public final class CommandEngine {
     public var config: SleightConfig
 
     private enum Axis { case horizontal, vertical }
 
-    private struct Slider {
+    /// 🤏 held: the media remote.
+    private struct Remote {
         var handID: Int
         var start: Double
         var origin: Vec2
         var axis: Axis?
-        /// Offset along the axis where it locked; steps count from here.
         var base = 0.0
         var index = 0
-        var switcherOpen = false
+    }
+
+    /// ✊ held: the app switcher.
+    private struct Grab {
+        var handID: Int
+        var origin: Vec2
+        var open = false
+        var base = 0.0
+        var index = 0
     }
 
     private var swipes = FlickDetector()
     private var flicks = FlickDetector()
-    private var slider: Slider?
+    private var remote: Remote?
+    private var grab: Grab?
     private var pointSince: Double?
-    private var zoomBase: Double?
     private var quietUntil = -Double.infinity
 
     public init(config: SleightConfig = .default) { self.config = config }
 
-    /// Ignore everything until `time` (after leaving pointer mode, the fist
-    /// that ended it must not trigger anything).
+    /// Ignore everything until `time`.
     public func quiet(until time: Double) {
         quietUntil = max(quietUntil, time)
         pointSince = nil
-        zoomBase = nil
     }
 
-    /// Abandon whatever is in progress. Returns the actions needed to leave the
-    /// OS in a clean state (e.g. close the app switcher without switching).
+    /// Abandon whatever is in progress, leaving the OS clean (never ⌘ held down).
     public func cancel() -> [EngineAction] {
         defer {
-            slider = nil
+            remote = nil
+            grab = nil
             pointSince = nil
-            zoomBase = nil
             swipes.reset()
             flicks.reset()
         }
-        if slider?.switcherOpen == true { return [.switcher(.cancel)] }
-        return []
+        return grab?.open == true ? [.switcher(.cancel)] : []
     }
 
     public struct Result {
@@ -71,42 +76,22 @@ public final class CommandEngine {
         var r = Result()
         guard t >= quietUntil else { return r }
 
-        if slider != nil {
-            stepSlider(tracks: tracks, time: t, hud: &hud, result: &r)
-            return r
-        }
+        if remote != nil { stepRemote(tracks: tracks, time: t, hud: &hud, result: &r); return r }
+        if grab != nil { stepGrab(tracks: tracks, time: t, hud: &hud, result: &r); return r }
 
         let ready = tracks.visible.filter { $0.anchor.y < config.activeBelowLine }
+        guard let hand = primary(ready) else { pointSince = nil; return r }
+        let settled = t - hand.firstSeen >= config.settleTime
 
-        // Two open hands: zoom, and nothing else.
-        if config.zoomEnabled, ready.count == 2,
-           ready.allSatisfy({ $0.shape(heldFor: config.settleTime, at: t) == .open }) {
-            let a = ready[0], b = ready[1]
-            let d = distance(a.anchor, b.anchor) / ((a.scale + b.scale) / 2)
-            if let base = zoomBase {
-                if d / base >= config.zoomStepRatio {
-                    r.actions.append(.shortcut(.zoomIn)); zoomBase = d
-                } else if base / d >= config.zoomStepRatio {
-                    r.actions.append(.shortcut(.zoomOut)); zoomBase = d
-                }
-            } else {
-                zoomBase = d
-            }
-            hud.cue = .zoom
+        if hand.pinchBegan, settled {
+            remote = Remote(handID: hand.id, start: t, origin: hand.anchor)
+            hud.cue = .media
             pointSince = nil
             return r
         }
-        zoomBase = nil
-
-        guard let hand = primary(ready) else {
-            pointSince = nil
-            return r
-        }
-
-        // A pinch starts the slider (tap = play/pause, slide = apps or volume).
-        if hand.pinchBegan, t - hand.firstSeen >= config.settleTime {
-            slider = Slider(handID: hand.id, start: t, origin: hand.anchor)
-            hud.cue = .pinch
+        if config.grabEnabled, hand.shape(heldFor: config.settleTime, at: t) == .fist, settled {
+            grab = Grab(handID: hand.id, origin: hand.anchor)
+            hud.cue = .grab
             pointSince = nil
             return r
         }
@@ -124,8 +109,7 @@ public final class CommandEngine {
                                               repeatGap: config.flickRepeatGap, returnGap: config.flickReturnGap)
             if let f = swipes.detect(hand, shape: .open, at: t, settle: config.settleTime, allow: allow, th) {
                 switch f.direction {
-                // Content follows the hand, like the trackpad: pushing right
-                // reveals the desktop on the left.
+                // Content follows the hand, like the trackpad.
                 case .right: r.actions.append(.shortcut(.spaceLeft))
                 case .left: r.actions.append(.shortcut(.spaceRight))
                 case .up: r.actions.append(.shortcut(.missionControl))
@@ -167,7 +151,7 @@ public final class CommandEngine {
                                  repeatGap: config.flickRepeatGap, returnGap: config.flickReturnGap)
     }
 
-    /// Two-finger flick → scroll momentum or back/forward. Shared with pointer mode.
+    /// ✌️ flick → scroll momentum or back/forward. Shared with pointer mode.
     func flickActions(_ f: Flick) -> [EngineAction] {
         let mag = clamp(f.speed * config.scrollFlickGain, config.scrollFlickMin, config.scrollFlickMax)
         // Wheel axis: negative y = content moves up (reveals what is below).
@@ -180,75 +164,92 @@ public final class CommandEngine {
         }
     }
 
-    /// The hand to listen to: one that is pinching, else the one holding a
-    /// gesture shape, else the biggest.
+    /// The hand to listen to: one that is pinching, else one holding a gesture
+    /// shape, else the biggest.
     private func primary(_ hands: [TrackedHand]) -> TrackedHand? {
         func rank(_ h: TrackedHand) -> Int {
             if h.pinched { return 0 }
             switch h.shape {
-            case .vee, .point: return 1
+            case .vee, .point, .fist: return 1
             case .open: return 2
-            default: return 3
+            case .other: return 3
             }
         }
-        return hands.min { a, b in
-            rank(a) != rank(b) ? rank(a) < rank(b) : a.scale > b.scale
-        }
+        return hands.min { a, b in rank(a) != rank(b) ? rank(a) < rank(b) : a.scale > b.scale }
     }
 
-    private func stepSlider(tracks: HandTracks, time t: Double, hud: inout HUDState, result r: inout Result) {
-        guard var s = slider else { return }
-        guard let hand = tracks.hand(id: s.handID) else {
-            // Hand gone: never leave ⌘ held down.
-            if s.switcherOpen { r.actions.append(.switcher(.cancel)) }
-            slider = nil
-            return
-        }
-        guard hand.visible else {
-            hud.cue = s.axis == nil ? .pinch : (s.axis == .horizontal ? .apps : .volume)
-            return
-        }
+    /// Steps centred on multiples of `step` with a hysteresis band, so sliding
+    /// back feels exactly like sliding forward and never flickers.
+    private func stepper(_ pos: Double, _ step: Double, index: inout Int,
+                         up: EngineAction, down: EngineAction, into actions: inout [EngineAction]) {
+        while pos - Double(index) * step > 0.65 * step { index += 1; actions.append(up) }
+        while Double(index) * step - pos > 0.65 * step { index -= 1; actions.append(down) }
+    }
+
+    // MARK: 🤏 media remote
+
+    private func stepRemote(tracks: HandTracks, time t: Double, hud: inout HUDState, result r: inout Result) {
+        guard var m = remote else { return }
+        guard let hand = tracks.hand(id: m.handID) else { remote = nil; return }
+        hud.cue = m.axis == .vertical ? .volume : .media
+        guard hand.visible else { return }
 
         if hand.pinchEnded || !hand.pinched {
-            if s.axis == nil, t - s.start <= config.pinchTapMax {
-                r.actions.append(.media(.playPause))
-            }
-            if s.switcherOpen { r.actions.append(.switcher(.commit)) }
-            slider = nil
+            if m.axis == nil, t - m.start <= config.pinchTapMax { r.actions.append(.media(.playPause)) }
+            remote = nil
             return
         }
 
-        let offset = (hand.anchor - s.origin) / hand.scale
-        if s.axis == nil, offset.length >= config.pinchAxisLock {
-            if abs(offset.x) >= abs(offset.y) {
-                s.axis = .horizontal
-                s.base = offset.x
-                s.switcherOpen = true
-                // ⌘-Tab already selects the next app.
-                r.actions.append(.switcher(.begin))
-            } else {
-                s.axis = .vertical
-                s.base = offset.y
+        let offset = (hand.anchor - m.origin) / hand.scale
+        if m.axis == nil, offset.length >= config.pinchAxisLock {
+            if abs(offset.y) >= abs(offset.x) {
+                m.axis = .vertical
+                m.base = offset.y
                 r.actions.append(.media(offset.y < 0 ? .volumeUp : .volumeDown))
+            } else {
+                m.axis = .horizontal
+                // One skip per pinch: right = next track.
+                if config.trackSkipEnabled { r.actions.append(.media(offset.x > 0 ? .next : .previous)) }
             }
         }
-        // Steps are centred on multiples of the step size with a hysteresis band,
-        // so sliding back feels exactly like sliding forward and never flickers.
-        func stepper(_ pos: Double, _ step: Double, up: EngineAction, down: EngineAction) {
-            while pos - Double(s.index) * step > 0.65 * step { s.index += 1; r.actions.append(up) }
-            while Double(s.index) * step - pos > 0.65 * step { s.index -= 1; r.actions.append(down) }
-        }
-        switch s.axis {
-        case .horizontal:
-            stepper(offset.x - s.base, config.appStep, up: .switcher(.next), down: .switcher(.previous))
-            hud.cue = .apps
-        case .vertical:
+        if m.axis == .vertical {
             // Hand up (negative y) = louder.
-            stepper(s.base - offset.y, config.volumeStep, up: .media(.volumeUp), down: .media(.volumeDown))
-            hud.cue = .volume
-        case nil:
-            hud.cue = .pinch
+            stepper(m.base - offset.y, config.volumeStep, index: &m.index,
+                    up: .media(.volumeUp), down: .media(.volumeDown), into: &r.actions)
         }
-        slider = s
+        remote = m
+    }
+
+    // MARK: ✊ app switcher
+
+    private func stepGrab(tracks: HandTracks, time t: Double, hud: inout HUDState, result r: inout Result) {
+        guard var g = grab else { return }
+        guard let hand = tracks.hand(id: g.handID) else {
+            if g.open { r.actions.append(.switcher(.cancel)) }
+            grab = nil
+            return
+        }
+        hud.cue = g.open ? .apps : .grab
+        guard hand.visible else { return }
+
+        // Opening the hand drops the selection.
+        if hand.shape != .fist {
+            if g.open { r.actions.append(.switcher(.commit)) }
+            grab = nil
+            return
+        }
+
+        let offset = (hand.anchor - g.origin) / hand.scale
+        if !g.open, abs(offset.x) >= config.grabLock, abs(offset.x) > abs(offset.y) {
+            g.open = true
+            g.base = offset.x
+            // ⌘-Tab already selects the next app.
+            r.actions.append(.switcher(.begin))
+        }
+        if g.open {
+            stepper(offset.x - g.base, config.appStep, index: &g.index,
+                    up: .switcher(.next), down: .switcher(.previous), into: &r.actions)
+        }
+        grab = g
     }
 }

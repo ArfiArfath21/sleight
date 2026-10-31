@@ -79,6 +79,7 @@ final class OutputDriver {
         case .mouseUp(let b, let p, let c):
             finishGlide(at: p)
             if !dryRun { injector.button(b, down: false, at: p, clickCount: c) }
+            notify(action)
 
         case .scrollFlick(let v):
             if let m = momentum, (m.y > 0) == (v.y > 0), (m.x > 0) == (v.x > 0) {
@@ -108,6 +109,10 @@ final class OutputDriver {
         case .modeChanged(let m, _):
             gliding = false
             if m == .command { pos = nil; shared.clearOutputCursor() }
+            notify(action)
+
+        case .activeChanged:
+            momentum = nil
             notify(action)
         }
     }

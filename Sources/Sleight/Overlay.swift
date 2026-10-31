@@ -58,6 +58,10 @@ final class Overlay {
         var chip: Chip?
         if let f = flash {
             chip = f.chip
+        } else if !hud.active {
+            // Resting: say so only while a hand is up (or a first clap was heard).
+            if hud.cue == .clap { chip = Chip.cue(.clap, progress: 0) }
+            else if hud.handsVisible > 0, showHints { chip = Chip.resting }
         } else if hud.mode == .pointer {
             chip = Chip.pointer(progress: hud.progress)
         } else if showHints, let cue = hud.cue {
@@ -94,13 +98,18 @@ struct Chip: Equatable {
         switch cue {
         case .swipe: return Chip(symbol: "hand.raised", title: "Swipe", detail: "← →  desktops    ↑  Mission Control")
         case .scroll: return Chip(symbol: "arrow.up.and.down", title: "Flick to scroll", detail: "↑ ↓  scroll    ← →  back · forward")
-        case .pinch: return Chip(symbol: "hand.pinch", title: "Pinch", detail: "let go  play/pause    slide ↔ apps    ↕ volume")
-        case .apps: return Chip(symbol: "square.stack.3d.up", title: "Apps", detail: "slide to choose · let go to switch")
+        case .media: return Chip(symbol: "playpause", title: "Media", detail: "let go  play/pause    ↕ volume    ↔ track")
         case .volume: return Chip(symbol: "speaker.wave.2", title: "Volume", detail: "slide up or down")
+        case .grab: return Chip(symbol: "hand.raised.fingers.spread", title: "Grab", detail: "slide sideways to switch apps")
+        case .apps: return Chip(symbol: "square.stack.3d.up", title: "Apps", detail: "slide to choose · open hand to switch")
         case .point: return Chip(symbol: "cursorarrow.rays", title: "Hold to point", detail: nil, progress: progress)
-        case .zoom: return Chip(symbol: "plus.magnifyingglass", title: "Zoom", detail: "spread · squeeze")
+        case .curtains: return Chip(symbol: "rectangle.portrait.split.2x1", title: "Part the curtains", detail: "sweep apart for the desktop")
+        case .frame: return Chip(symbol: "camera.viewfinder", title: "Hold the frame", detail: nil, progress: progress)
+        case .clap: return Chip(symbol: "hands.clap", title: "Clap again", detail: "to rest / wake Sleight")
         }
     }
+
+    static let resting = Chip(symbol: "moon", title: "Sleight is resting", detail: "👏👏 clap twice to wake")
 
     static func pointer(progress: Double) -> Chip {
         Chip(symbol: "cursorarrow", title: "Pointer",
@@ -130,8 +139,8 @@ struct Chip: Equatable {
             case .spaceRight: return c("arrow.right.square", "Desktop →")
             case .missionControl: return c("rectangle.3.group", "Mission Control")
             case .appExpose: return c("rectangle.stack", "App windows")
-            case .zoomIn: return c("plus.magnifyingglass", "Zoom in")
-            case .zoomOut: return c("minus.magnifyingglass", "Zoom out")
+            case .showDesktop: return c("macwindow.on.rectangle", "Desktop")
+            case .screenshot: return nil
             }
         case .media(let m):
             switch m {
@@ -148,8 +157,11 @@ struct Chip: Equatable {
             case .cancel: return c("xmark", "Cancelled")
             default: return nil
             }
-        case .modeChanged(let m, _):
+        case .modeChanged(let m, let reason):
+            if reason == .resting { return nil }
             return m == .pointer ? c("cursorarrow", "Pointer mode") : c("hand.raised", "Gestures")
+        case .activeChanged(let on):
+            return on ? c("sparkle", "Sleight is listening") : Chip(symbol: "moon", title: "Resting", detail: "👏👏 to wake", accent: true)
         default:
             return nil
         }
@@ -166,6 +178,8 @@ final class OverlayWindow: NSWindow {
         backgroundColor = .clear
         hasShadow = false
         ignoresMouseEvents = true
+        // Keep the HUD out of screenshots (the frame gesture) and screen sharing.
+        sharingType = .none
         level = .screenSaver
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
@@ -204,11 +218,11 @@ final class OverlayView: NSView {
         }
         ring.lineWidth = 2
         ring.strokeColor = NSColor.white.cgColor
-        ring.shadowColor = Brand.cyan
+        ring.shadowColor = Brand.gold
         ring.shadowOpacity = 0.6
         ring.shadowRadius = 4
         ring.shadowOffset = .zero
-        fill.fillColor = Brand.cyan
+        fill.fillColor = Brand.gold
 
         chipLayer.contentsScale = scale
         chipLayer.contentsGravity = .center
@@ -322,72 +336,73 @@ final class OverlayView: NSView {
 
     // MARK: Intro
 
-    /// The mark draws itself in the centre of the screen, its head flying along
-    /// the stroke, then lifts away.
+    /// The ring fades in, a stroke sweeps around it and lands on the gold point.
     func playIntro() {
-        let size: CGFloat = 220
+        let size: CGFloat = 200
         let container = CALayer()
         container.frame = CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
         layer?.addSublayer(container)
+        let k = size / 1024
 
-        let pts = Brand.pathPoints(spacing: 6).map { CGPoint(x: $0.x / 1024 * size, y: $0.y / 1024 * size) }
+        let ring = CAShapeLayer()
+        let r = 250 * k
+        ring.path = CGPath(ellipseIn: CGRect(x: size / 2 - r, y: size / 2 - r, width: r * 2, height: r * 2), transform: nil)
+        ring.strokeColor = Brand.ivory.copy(alpha: 0.25)
+        ring.fillColor = nil
+        ring.lineWidth = 1.5
+        container.addSublayer(ring)
+
+        let pts = Brand.sweepPoints().map { CGPoint(x: $0.x * k, y: $0.y * k) }
         let path = CGMutablePath()
         path.addLines(between: pts)
-
-        let gradient = CAGradientLayer()
-        gradient.frame = container.bounds
-        gradient.colors = [Brand.magenta, Brand.indigo, Brand.cyan]
-        gradient.startPoint = CGPoint(x: 0.2, y: 0)
-        gradient.endPoint = CGPoint(x: 0.8, y: 1)
         let stroke = CAShapeLayer()
         stroke.path = path
-        stroke.lineWidth = 12
-        stroke.lineCap = .round
-        stroke.lineJoin = .round
-        stroke.strokeColor = NSColor.white.cgColor
+        stroke.strokeColor = Brand.ivory
         stroke.fillColor = nil
-        gradient.mask = stroke
-        container.addSublayer(gradient)
+        stroke.lineWidth = 5
+        stroke.lineCap = .round
+        container.addSublayer(stroke)
 
         let head = CALayer()
-        head.bounds = CGRect(x: 0, y: 0, width: 18, height: 18)
-        head.cornerRadius = 9
-        head.backgroundColor = NSColor.white.cgColor
-        head.shadowColor = Brand.cyan
-        head.shadowOpacity = 1
-        head.shadowRadius = 12
+        head.bounds = CGRect(x: 0, y: 0, width: 14, height: 14)
+        head.cornerRadius = 7
+        head.backgroundColor = Brand.gold
+        head.shadowColor = Brand.gold
+        head.shadowOpacity = 0.9
+        head.shadowRadius = 10
         head.shadowOffset = .zero
         head.position = pts.last!
         container.addSublayer(head)
 
+        let duration = 0.7
+        let ease = CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)
+        let fadeIn = CABasicAnimation(keyPath: "opacity")
+        fadeIn.fromValue = 0; fadeIn.toValue = 1; fadeIn.duration = 0.25
+        ring.add(fadeIn, forKey: "in")
         let draw = CABasicAnimation(keyPath: "strokeEnd")
-        draw.fromValue = 0
-        draw.toValue = 1
-        draw.duration = 0.65
-        draw.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        draw.fromValue = 0; draw.toValue = 1; draw.duration = duration; draw.timingFunction = ease
         stroke.add(draw, forKey: "draw")
         let fly = CAKeyframeAnimation(keyPath: "position")
-        fly.path = path
-        fly.duration = 0.65
-        fly.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        fly.calculationMode = .paced
+        fly.path = path; fly.duration = duration; fly.calculationMode = .paced; fly.timingFunction = ease
         head.add(fly, forKey: "fly")
+        let land = CAKeyframeAnimation(keyPath: "transform.scale")
+        land.values = [1, 1.8, 1]; land.keyTimes = [0, 0.4, 1]
+        land.beginTime = CACurrentMediaTime() + duration; land.duration = 0.3
+        head.add(land, forKey: "land")
 
         let out = CAAnimationGroup()
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 1; fade.toValue = 0
         let shrink = CABasicAnimation(keyPath: "transform.scale")
-        shrink.fromValue = 1; shrink.toValue = 0.6
-        let lift = CABasicAnimation(keyPath: "position.y")
-        lift.fromValue = container.position.y; lift.toValue = bounds.height - 40
-        out.animations = [fade, shrink, lift]
-        out.beginTime = CACurrentMediaTime() + 1.0
-        out.duration = 0.45
+        shrink.fromValue = 1; shrink.toValue = 0.7
+        out.animations = [fade, shrink]
+        out.beginTime = CACurrentMediaTime() + 1.25
+        out.duration = 0.4
         out.timingFunction = CAMediaTimingFunction(name: .easeIn)
         out.fillMode = .forwards
         out.isRemovedOnCompletion = false
         container.add(out, forKey: "out")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { container.removeFromSuperlayer() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { container.removeFromSuperlayer() }
     }
 }
 
@@ -422,7 +437,7 @@ enum ChipRenderer {
             ctx.clip()
             if chip.accent {
                 let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                   colors: [Brand.magenta, Brand.indigo, Brand.cyan] as CFArray, locations: [0, 0.5, 1])!
+                                   colors: [Brand.gold, Brand.ivory, Brand.gold] as CFArray, locations: [0, 0.5, 1])!
                 ctx.drawLinearGradient(g, start: .zero, end: CGPoint(x: w, y: 0), options: [])
             } else {
                 ctx.setFillColor(CGColor(gray: 1, alpha: 0.14))
@@ -438,13 +453,13 @@ enum ChipRenderer {
                 ctx.setStrokeColor(CGColor(gray: 1, alpha: 0.15))
                 ctx.addArc(center: iconCenter, radius: 15, startAngle: 0, endAngle: .pi * 2, clockwise: false)
                 ctx.strokePath()
-                ctx.setStrokeColor(Brand.cyan)
+                ctx.setStrokeColor(Brand.gold)
                 ctx.addArc(center: iconCenter, radius: 15, startAngle: .pi / 2,
                            endAngle: .pi / 2 - .pi * 2 * CGFloat(min(chip.progress, 1)), clockwise: true)
                 ctx.strokePath()
             }
             let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-                .applying(.init(paletteColors: [chip.accent ? NSColor(cgColor: Brand.cyan)! : .white]))
+                .applying(.init(paletteColors: [chip.accent ? NSColor(cgColor: Brand.gold)! : .white]))
             if let sym = NSImage(systemSymbolName: chip.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
                 let s = sym.size
                 sym.draw(in: CGRect(x: iconCenter.x - s.width / 2, y: iconCenter.y - s.height / 2, width: s.width, height: s.height))

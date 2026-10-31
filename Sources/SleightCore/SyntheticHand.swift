@@ -17,6 +17,9 @@ public struct SyntheticHand: Sendable {
     public var pinch: Double = 0
     /// 0 = thumb away, 1 = thumb tip touching middle tip.
     public var middlePinch: Double = 0
+    /// 0…1: thumb sticking straight out sideways (the "L" of a framing hand).
+    /// nil = the thumb follows the fingers naturally.
+    public var thumbOut: Double?
     public var chirality: Chirality = .right
     public var confidence: Float = 0.9
 
@@ -36,6 +39,11 @@ public struct SyntheticHand: Sendable {
 
     public static func point(at wrist: Vec2, scale: Double = 0.16) -> SyntheticHand {
         var h = openPalm(at: wrist, scale: scale); h.fingers = [1, 0, 0, 0]; return h
+    }
+
+    /// "L" shape: index up, thumb out sideways, other fingers folded.
+    public static func frameL(at wrist: Vec2, scale: Double = 0.16) -> SyntheticHand {
+        var h = point(at: wrist, scale: scale); h.thumbOut = 1; return h
     }
 
     /// Relaxed pointing hand: fingers loosely extended.
@@ -85,6 +93,9 @@ public struct SyntheticHand: Sendable {
         let fistThumb = Vec2(-0.15, 0.72)
         let avgExt = fingers.reduce(0, +) / 4
         var thumbTip = lerp(fistThumb, thumbOpen[3], clamp(avgExt, 0, 1))
+        if let out = thumbOut {
+            thumbTip = lerp(fistThumb, Vec2(-1.15, 0.40), clamp(out, 0, 1))
+        }
         if pinch > 0 {
             thumbTip = lerp(thumbTip, local[Joint.indexTip.rawValue], clamp(pinch, 0, 1) * 0.97)
         } else if middlePinch > 0 {

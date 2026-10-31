@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusLine = NSMenuItem()
     private var qualityLine = NSMenuItem()
     private var enableItem = NSMenuItem()
+    private var activeItem = NSMenuItem()
+    private var gesturesActive = true
     private var pointerItem = NSMenuItem()
     private var statsItem = NSMenuItem()
     private var hintsItem = NSMenuItem()
@@ -52,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         hotKeys = [
-            HotKey(id: 1, keyCode: kVK_ANSI_S, modifiers: controlKey | optionKey) { [weak self] in self?.toggleEnabled() },
+            HotKey(id: 1, keyCode: kVK_ANSI_S, modifiers: controlKey | optionKey) { [weak self] in self?.toggleActive() },
             HotKey(id: 2, keyCode: kVK_ANSI_P, modifiers: controlKey | optionKey) { [weak self] in self?.togglePointer() },
             HotKey(id: 3, keyCode: kVK_ANSI_K, modifiers: controlKey | optionKey) { [weak self] in self?.toggleKeyboard() },
         ]
@@ -97,6 +99,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func toggleEnabled() { setEnabled(!enabled) }
 
+    /// Rest / wake: the camera keeps watching, gestures stop (except 👏👏).
+    @objc func toggleActive() {
+        guard enabled else { setEnabled(true); return }
+        pipeline.setActive(!gesturesActive)
+    }
+
+    private func updateMenuBarIcon() {
+        statusItem.button?.image = Brand.menuBarImage(active: enabled && gesturesActive, pointer: mode == .pointer)
+    }
+
     func setEnabled(_ on: Bool) {
         enabled = on
         overlay.enabled = on
@@ -104,6 +116,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pipeline.start { [weak self] ok in
                 guard let self else { return }
                 if ok {
+                    self.gesturesActive = true
+                    self.pipeline.setActive(true)
+                    self.updateMenuBarIcon()
                     self.overlay.playIntro()
                 } else {
                     self.enabled = false
@@ -117,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             keyboard.hide()
             mode = .command
         }
+        updateMenuBarIcon()
         refreshMenu()
     }
 
@@ -127,24 +143,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func handle(_ action: EngineAction) {
         if let chip = Chip.flash(for: action) { overlay.flash(chip) }
-        if case .modeChanged(let m, _) = action {
+        switch action {
+        case .modeChanged(let m, _):
             mode = m
-            statusItem.button?.image = Brand.menuBarImage(active: m == .pointer)
             if m == .pointer {
                 modeBar.show()
             } else {
                 modeBar.hide()
                 keyboard.hide()
             }
+            updateMenuBarIcon()
             refreshMenu()
+        case .activeChanged(let on):
+            gesturesActive = on
+            updateMenuBarIcon()
+            refreshMenu()
+        case .mouseUp(.left, _, _):
+            if mode == .pointer { showKeyboardIfTextFieldFocused() }
+        default:
+            break
         }
+    }
+
+    /// In pointer mode, clicking into a text field brings up the keyboard.
+    private func showKeyboardIfTextFieldFocused() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            guard let self, self.mode == .pointer, !self.keyboard.isVisible, Self.focusedElementIsText() else { return }
+            self.keyboard.show()
+        }
+    }
+
+    static func focusedElementIsText() -> Bool {
+        let system = AXUIElementCreateSystemWide()
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return false }
+        let el = element as! AXUIElement
+        var role: CFTypeRef?
+        AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &role)
+        let textRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]
+        if let r = role as? String, textRoles.contains(r) { return true }
+        // Editable web content (contenteditable, rich editors).
+        var editable: CFTypeRef?
+        if AXUIElementCopyAttributeValue(el, "AXEditable" as CFString, &editable) == .success, (editable as? Bool) == true {
+            return true
+        }
+        return false
     }
 
     // MARK: Menu
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = Brand.menuBarImage()
+        statusItem.button?.image = Brand.menuBarImage(active: false)
         statusItem.button?.toolTip = "Sleight"
 
         let menu = NSMenu()
@@ -155,9 +206,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(qualityLine)
         menu.addItem(.separator())
 
-        enableItem = item("Hand Gestures", #selector(toggleEnabled), "s")
-        enableItem.keyEquivalentModifierMask = [.control, .option]
-        menu.addItem(enableItem)
+        activeItem = item("Gestures Active", #selector(toggleActive), "s")
+        activeItem.keyEquivalentModifierMask = [.control, .option]
+        menu.addItem(activeItem)
         pointerItem = item("Pointer Mode", #selector(togglePointer), "p")
         pointerItem.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(pointerItem)
@@ -165,6 +216,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         kb.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(kb)
 
+        enableItem = item("Camera On", #selector(toggleEnabled), "")
+        menu.addItem(enableItem)
         let cameraItem = NSMenuItem(title: "Camera", action: nil, keyEquivalent: "")
         cameraItem.submenu = NSMenu()
         cameraItem.submenu?.delegate = self
@@ -207,15 +260,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshMenu() {
         enableItem.state = enabled ? .on : .off
+        activeItem.state = enabled && gesturesActive ? .on : .off
         pointerItem.state = mode == .pointer ? .on : .off
         statsItem.state = store.showStats ? .on : .off
         hintsItem.state = store.showHints ? .on : .off
         let q = pipeline.shared.quality
         if !enabled {
-            statusLine.title = "Off · ⌃⌥S to turn on"
+            statusLine.title = "Camera off · ⌃⌥S to start"
             qualityLine.title = "Camera is off"
         } else {
-            statusLine.title = mode == .pointer ? "Pointer mode · ✊ to exit" : "Gestures · ☝️ hold for pointer"
+            statusLine.title = !gesturesActive ? "Resting · 👏👏 or ⌃⌥S to wake"
+                : (mode == .pointer ? "Pointer mode · ✊ to exit" : "Active · 👏👏 to rest")
             let light = q.luma < 40 ? "dark" : (q.luma < 70 ? "dim" : "good")
             qualityLine.title = String(format: "%.0f fps · %.0f ms pipeline (p95 %.0f) · light %@",
                                        q.fps, q.latencyMs, q.latencyP95Ms, light)

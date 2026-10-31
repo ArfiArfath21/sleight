@@ -12,10 +12,11 @@ enum Snapshots {
 
         // Gesture chips: hints, confirmations, pointer mode.
         let chips: [Chip] = [
-            .cue(.scroll, progress: 0), .cue(.swipe, progress: 0), .cue(.pinch, progress: 0),
-            .cue(.point, progress: 0.6), .cue(.apps, progress: 0), .pointer(progress: 0),
+            .cue(.scroll, progress: 0), .cue(.swipe, progress: 0), .cue(.grab, progress: 0),
+            .cue(.media, progress: 0), .cue(.point, progress: 0.6), .cue(.frame, progress: 0.4),
+            .cue(.curtains, progress: 0), .cue(.clap, progress: 0), Chip.resting, .pointer(progress: 0),
             Chip.flash(for: .shortcut(.spaceLeft))!, Chip.flash(for: .media(.playPause))!,
-            Chip.flash(for: .scrollFlick(velocity: Vec2(0, -1)))!, Chip.flash(for: .shortcut(.missionControl))!,
+            Chip.flash(for: .activeChanged(true))!,
         ]
         let images = chips.compactMap { ChipRenderer.render($0, scale: scale) }
         let width = (images.map { CGFloat($0.width) / scale }.max() ?? 300) + 80
@@ -58,14 +59,14 @@ enum Snapshots {
         if let png = Brand.iconPNG(pixels: 1024) { try? png.write(to: dir.appendingPathComponent("logo.png")) }
 
         // The wordmark: mark + name, for the README header.
-        let word = NSImage(size: NSSize(width: 700, height: 220), flipped: false) { rect in
+        let word = NSImage(size: NSSize(width: 720, height: 220), flipped: false) { rect in
             let ctx = NSGraphicsContext.current!.cgContext
-            ctx.setFillColor(Brand.deep)
+            ctx.setFillColor(Brand.ink)
             ctx.fill(rect)
-            Brand.drawMark(in: ctx, rect: CGRect(x: 10, y: -10, width: 240, height: 240))
-            let font = NSFont.systemFont(ofSize: 96, weight: .semibold)
-            let rounded = font.fontDescriptor.withDesign(.rounded).flatMap { NSFont(descriptor: $0, size: 96) } ?? font
-            ("Sleight" as NSString).draw(at: NSPoint(x: 212, y: 52), withAttributes: [.font: rounded, .foregroundColor: NSColor.white, .kern: -1.5])
+            Brand.drawMark(in: ctx, rect: CGRect(x: -20, y: -10, width: 240, height: 240))
+            let font = NSFont.systemFont(ofSize: 84, weight: .light)
+            ("Sleight" as NSString).draw(at: NSPoint(x: 236, y: 58),
+                                         withAttributes: [.font: font, .foregroundColor: NSColor(cgColor: Brand.ivory)!, .kern: 3])
             return true
         }
         write(word, to: dir.appendingPathComponent("wordmark.png"), scale: scale)
