@@ -10,11 +10,19 @@ Camera hand gestures for macOS: a handful of easy gestures, both hands, no aimin
   <a href="https://ko-fi.com/arfiarfath21"><img src="https://img.shields.io/badge/support-Ko--fi-f7f2e6?labelColor=08080d&logo=kofi&logoColor=f7f2e6" alt="Support on Ko-fi"></a>
 </p>
 
+<p align="center">
+  <a href="#install"><img src="docs/images/download.svg" alt="Install Sleight on macOS" height="64"></a>
+</p>
+
+<p align="center">
+  <img src="docs/images/chips.png" alt="Sleight's gesture hints and confirmations" width="460">
+</p>
+
 ---
 
 Sleight watches your hands through the Mac's camera and turns a few natural motions
-into the things you do all day: scroll, go back, switch desktops and apps, control
-music, show the desktop, take a screenshot. Gestures depend on **what your hand is doing, not where it is**, so you
+into the things you do all day: scroll, go back, switch desktops and apps, show the
+desktop, take a screenshot, and anything else you assign. Gestures depend on **what your hand is doing, not where it is**, so you
 can raise a hand anywhere in view and flick. When you do need to aim, point and hold to
 get a cursor, then make a fist to put it away.
 
