@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.arfiarfath21.maestro</string>
+    <string>com.arfiarfath21.sleight</string>
     <key>CFBundleName</key>
-    <string>Maestro</string>
+    <string>Sleight</string>
     <key>CFBundleDisplayName</key>
-    <string>Maestro</string>
+    <string>Sleight</string>
     <key>CFBundleExecutable</key>
-    <string>Maestro</string>
+    <string>Sleight</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundlePackageType</key>
@@ -25,8 +25,10 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSCameraUsageDescription</key>
-    <string>Maestro watches your hand through the camera to control the cursor. Video never leaves your Mac.</string>
+    <string>Sleight watches your hands through the camera to recognise gestures. Video never leaves your Mac.</string>
     <key>NSCameraUseContinuityCameraDeviceType</key>
     <true/>
+    <key>NSCameraReactionEffectGesturesEnabledDefault</key>
+    <false/>
 </dict>
 </plist>

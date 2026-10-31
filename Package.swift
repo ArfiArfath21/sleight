@@ -2,38 +2,38 @@
 import PackageDescription
 
 let package = Package(
-    name: "Maestro",
+    name: "Sleight",
     platforms: [.macOS(.v15)],
     products: [
-        .executable(name: "Maestro", targets: ["Maestro"]),
-        .executable(name: "maestro-icon", targets: ["MaestroIcon"]),
+        .executable(name: "Sleight", targets: ["Sleight"]),
+        .executable(name: "sleight-icon", targets: ["SleightIcon"]),
     ],
     targets: [
         // Pure gesture logic: no AppKit, no Vision. Everything here is unit tested.
         .target(
-            name: "MaestroCore",
-            path: "Sources/MaestroCore"
+            name: "SleightCore",
+            path: "Sources/SleightCore"
         ),
         // Logo drawing shared by the app (menu bar, icon) and the icon generator.
         .target(
-            name: "MaestroBrand",
-            path: "Sources/MaestroBrand"
+            name: "SleightBrand",
+            path: "Sources/SleightBrand"
         ),
         .executableTarget(
-            name: "Maestro",
-            dependencies: ["MaestroCore", "MaestroBrand"],
-            path: "Sources/Maestro",
+            name: "Sleight",
+            dependencies: ["SleightCore", "SleightBrand"],
+            path: "Sources/Sleight",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "MaestroIcon",
-            dependencies: ["MaestroBrand"],
-            path: "Sources/MaestroIcon"
+            name: "SleightIcon",
+            dependencies: ["SleightBrand"],
+            path: "Sources/SleightIcon"
         ),
         .testTarget(
-            name: "MaestroCoreTests",
-            dependencies: ["MaestroCore"],
-            path: "Tests/MaestroCoreTests",
+            name: "SleightCoreTests",
+            dependencies: ["SleightCore"],
+            path: "Tests/SleightCoreTests",
             resources: [.copy("Fixtures")]
         ),
     ]

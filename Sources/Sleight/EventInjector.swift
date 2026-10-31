@@ -1,0 +1,202 @@
+import CoreGraphics
+import AppKit
+import SleightCore
+
+/// Posts synthetic input. Every event is tagged so `InputMonitor` can tell our
+/// events apart from the user's real keyboard and trackpad.
+final class EventInjector {
+    static let tag: Int64 = 0x53_4C45_4947_4854 // "SLEIGHT"
+
+    private let source: CGEventSource?
+    private var leftDown = false
+    private var rightDown = false
+    private var commandHeld = false
+    private var scrollRemainder = Vec2.zero
+
+    init() {
+        source = CGEventSource(stateID: .hidSystemState)
+        // By default the system ignores real input for 0.25 s after a synthetic
+        // event. Never lock the user's own trackpad out.
+        source?.localEventsSuppressionInterval = 0
+    }
+
+    private func post(_ e: CGEvent?) {
+        guard let e else { return }
+        e.setIntegerValueField(.eventSourceUserData, value: EventInjector.tag)
+        e.post(tap: .cghidEventTap)
+    }
+
+    static func currentCursor() -> Vec2 {
+        let p = CGEvent(source: nil)?.location ?? .zero
+        return Vec2(Double(p.x), Double(p.y))
+    }
+
+    // MARK: Mouse
+
+    func move(to p: Vec2, delta: Vec2) {
+        let type: CGEventType = leftDown ? .leftMouseDragged : (rightDown ? .rightMouseDragged : .mouseMoved)
+        let e = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: CGPoint(x: p.x, y: p.y),
+                        mouseButton: rightDown ? .right : .left)
+        e?.setIntegerValueField(.mouseEventDeltaX, value: Int64(delta.x.rounded()))
+        e?.setIntegerValueField(.mouseEventDeltaY, value: Int64(delta.y.rounded()))
+        post(e)
+    }
+
+    func button(_ b: MouseButton, down: Bool, at p: Vec2, clickCount: Int) {
+        let type: CGEventType
+        switch (b, down) {
+        case (.left, true): type = .leftMouseDown; leftDown = true
+        case (.left, false): type = .leftMouseUp; leftDown = false
+        case (.right, true): type = .rightMouseDown; rightDown = true
+        case (.right, false): type = .rightMouseUp; rightDown = false
+        }
+        let e = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: CGPoint(x: p.x, y: p.y),
+                        mouseButton: b == .left ? .left : .right)
+        e?.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
+        post(e)
+    }
+
+    /// Release anything held (buttons, ⌘). Called on pause/quit so nothing sticks.
+    func releaseAll(at p: Vec2) {
+        if leftDown { button(.left, down: false, at: p, clickCount: 1) }
+        if rightDown { button(.right, down: false, at: p, clickCount: 1) }
+        if commandHeld { setCommand(false) }
+    }
+
+    // MARK: Scroll
+
+    /// Smooth pixel scroll, no gesture phases: every app handles these like a
+    /// high-resolution mouse wheel. +y = content moves down.
+    func scroll(_ delta: Vec2) {
+        let total = delta + scrollRemainder
+        let ix = total.x.rounded(.towardZero), iy = total.y.rounded(.towardZero)
+        scrollRemainder = total - Vec2(ix, iy)
+        guard ix != 0 || iy != 0,
+              let e = CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2,
+                              wheel1: Int32(iy), wheel2: Int32(ix), wheel3: 0) else { return }
+        e.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+        post(e)
+    }
+
+    // MARK: Keyboard
+
+    func key(_ code: CGKeyCode, flags: CGEventFlags = []) {
+        keyDown(code, flags: flags)
+        keyUp(code, flags: flags)
+    }
+
+    func keyDown(_ code: CGKeyCode, flags: CGEventFlags = []) {
+        let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
+        e?.flags = flags
+        post(e)
+    }
+
+    func keyUp(_ code: CGKeyCode, flags: CGEventFlags = []) {
+        let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
+        e?.flags = flags
+        post(e)
+    }
+
+    /// Types text independent of the keyboard layout.
+    func type(_ text: String) {
+        let units = Array(text.utf16)
+        for down in [true, false] {
+            let e = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
+            units.withUnsafeBufferPointer { buf in
+                e?.keyboardSetUnicodeString(stringLength: buf.count, unicodeString: buf.baseAddress)
+            }
+            post(e)
+        }
+    }
+
+    /// Press or release a modifier key on its own (flagsChanged).
+    func modifier(_ code: CGKeyCode, flag: CGEventFlags, down: Bool, otherFlags: CGEventFlags = []) {
+        let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down)
+        e?.type = .flagsChanged
+        e?.flags = down ? otherFlags.union(flag) : otherFlags
+        post(e)
+    }
+
+    private func setCommand(_ down: Bool) {
+        modifier(KeyCode.command, flag: .maskCommand, down: down)
+        commandHeld = down
+    }
+
+    // MARK: Commands
+
+    /// Arrow keys carry these flags when typed on a real keyboard; some system
+    /// shortcuts (Spaces) ignore arrows without them.
+    private static let arrowFlags: CGEventFlags = [.maskSecondaryFn, .maskNumericPad]
+
+    func shortcut(_ s: Shortcut) {
+        switch s {
+        case .back: key(KeyCode.leftBracket, flags: .maskCommand)
+        case .forward: key(KeyCode.rightBracket, flags: .maskCommand)
+        case .spaceLeft: key(KeyCode.left, flags: Self.arrowFlags.union(.maskControl))
+        case .spaceRight: key(KeyCode.right, flags: Self.arrowFlags.union(.maskControl))
+        case .missionControl: key(KeyCode.up, flags: Self.arrowFlags.union(.maskControl))
+        case .appExpose: key(KeyCode.down, flags: Self.arrowFlags.union(.maskControl))
+        case .zoomIn: key(KeyCode.equal, flags: .maskCommand)
+        case .zoomOut: key(KeyCode.minus, flags: .maskCommand)
+        }
+    }
+
+    func switcher(_ step: SwitcherStep) {
+        switch step {
+        case .begin:
+            setCommand(true)
+            key(KeyCode.tab, flags: .maskCommand)
+        case .next:
+            key(KeyCode.tab, flags: .maskCommand)
+        case .previous:
+            key(KeyCode.tab, flags: [.maskCommand, .maskShift])
+        case .commit:
+            setCommand(false)
+        case .cancel:
+            key(KeyCode.escape, flags: .maskCommand)
+            setCommand(false)
+        }
+    }
+
+    /// Hardware media keys (play/pause, volume), exactly as the keyboard sends them.
+    func media(_ k: MediaKey) {
+        let code: Int
+        switch k {
+        case .volumeUp: code = 0       // NX_KEYTYPE_SOUND_UP
+        case .volumeDown: code = 1     // NX_KEYTYPE_SOUND_DOWN
+        case .playPause: code = 16     // NX_KEYTYPE_PLAY
+        case .next: code = 17          // NX_KEYTYPE_NEXT
+        case .previous: code = 18      // NX_KEYTYPE_PREVIOUS
+        }
+        for down in [true, false] {
+            let state = down ? 0xA : 0xB
+            let ev = NSEvent.otherEvent(with: .systemDefined, location: .zero,
+                                        modifierFlags: NSEvent.ModifierFlags(rawValue: UInt(state << 8)),
+                                        timestamp: 0, windowNumber: 0, context: nil, subtype: 8,
+                                        data1: (code << 16) | (state << 8), data2: -1)
+            post(ev?.cgEvent)
+        }
+    }
+}
+
+enum KeyCode {
+    static let a: CGKeyCode = 0
+    static let returnKey: CGKeyCode = 36
+    static let tab: CGKeyCode = 48
+    static let space: CGKeyCode = 49
+    static let delete: CGKeyCode = 51
+    static let escape: CGKeyCode = 53
+    static let command: CGKeyCode = 55
+    static let shift: CGKeyCode = 56
+    static let option: CGKeyCode = 58
+    static let control: CGKeyCode = 59
+    static let left: CGKeyCode = 123
+    static let right: CGKeyCode = 124
+    static let down: CGKeyCode = 125
+    static let up: CGKeyCode = 126
+    static let leftBracket: CGKeyCode = 33
+    static let rightBracket: CGKeyCode = 30
+    static let equal: CGKeyCode = 24
+    static let minus: CGKeyCode = 27
+    static let forwardDelete: CGKeyCode = 117
+}
