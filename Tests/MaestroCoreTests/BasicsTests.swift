@@ -87,6 +87,14 @@ final class HandPoseTests: XCTestCase {
         XCTAssertGreaterThan(abs(palm), 0.2)
     }
 
+    func testLowConfidenceGhostHandRejected() {
+        var h = SyntheticHand.openPalm(at: Vec2(0.6, 0.6))
+        h.confidence = 0.32
+        XCTAssertNil(HandPose.make(from: h.frame(), config: cfg))
+        h.confidence = 0.7
+        XCTAssertNotNil(HandPose.make(from: h.frame(), config: cfg))
+    }
+
     func testMissingKeyJointRejectsFrame() {
         var f = SyntheticHand.openPalm(at: Vec2(0.6, 0.6)).frame()
         f[.thumbTip] = nil

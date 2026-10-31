@@ -24,6 +24,8 @@ public struct HandPose: Sendable {
     /// Its sign flips when the hand turns over (palm vs back toward camera),
     /// independent of in-plane rotation.
     public let orientation: Double
+    /// Mean joint confidence (missing joints count as 0).
+    public let confidence: Double
 
     public var extendedCount: Int { extended.filter { $0 }.count }
     public var isOpenPalm: Bool { extended.allSatisfy { $0 } }
@@ -51,6 +53,8 @@ public struct HandPose: Sendable {
     public static func make(from frame: HandFrame, config: MaestroConfig,
                             previousExtended: [Bool]? = nil) -> HandPose? {
         let c = config.minJointConfidence
+        let meanConfidence = frame.points.reduce(0.0) { $0 + Double($1?.confidence ?? 0) } / Double(frame.points.count)
+        guard meanConfidence >= config.minHandConfidence else { return nil }
         guard let wrist = frame.position(.wrist, minConfidence: c),
               let indexMCP = frame.position(.indexMCP, minConfidence: c),
               let middleMCP = frame.position(.middleMCP, minConfidence: c),
@@ -101,6 +105,6 @@ public struct HandPose: Sendable {
         return HandPose(frame: frame, scale: scale, anchor: anchor, wrist: wrist,
                         extensionRatio: ratios, extended: ext,
                         pinchIndex: pinchIndex, pinchMiddle: pinchMiddle,
-                        orientation: orientation)
+                        orientation: orientation, confidence: meanConfidence)
     }
 }

@@ -16,6 +16,10 @@ public enum MappingMode: String, Codable, Sendable, CaseIterable {
 public struct MaestroConfig: Codable, Equatable, Sendable {
     // MARK: Tracking
     public var minJointConfidence: Float = 0.3
+    /// Mean confidence over all 21 joints (missing = 0). Vision reports
+    /// low-confidence "ghost hands" in dark or cluttered scenes; real hands in
+    /// usable light score well above this.
+    public var minHandConfidence: Double = 0.4
     /// Which hand to follow when several are visible. `.unknown` = whichever is biggest.
     public var preferredHand: Chirality = .right
     /// Hands smaller than this (in frame heights) are ignored: people in the background.

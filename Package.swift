@@ -33,7 +33,8 @@ let package = Package(
         .testTarget(
             name: "MaestroCoreTests",
             dependencies: ["MaestroCore"],
-            path: "Tests/MaestroCoreTests"
+            path: "Tests/MaestroCoreTests",
+            resources: [.copy("Fixtures")]
         ),
     ]
 )
