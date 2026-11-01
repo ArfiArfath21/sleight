@@ -129,11 +129,14 @@ highlight on hover.
 | `⌃⌥P` | Pointer mode on / off |
 | `⌃⌥K` | On-screen keyboard |
 | `⌃⌥V` | Speak one command (push to talk) |
+| `⌥ ⌥` | Double-tap: voice on / off (key is a setting) |
 
 ## Voice commands
 
 Hands are best for quick, continuous things (scrolling, flicking, sliding). Voice is
-best for things with a name. Voice is on by default and the wake word is **Jarvis**:
+best for things with a name. **Double-tap ⌥ Option** to turn voice on (it listens for a
+command straight away), then say **Jarvis, …** whenever you like. Double-tap again to
+turn it off and close the mic.
 
 | Say | Does |
 |---|---|
@@ -152,6 +155,11 @@ best for things with a name. Voice is on by default and the wake word is **Jarvi
 
 You can also say "Jarvis", pause, then the command. A chip shows what it heard as you
 speak. `⌃⌥V` takes one command without the wake word, even with voice off.
+
+- **Why not like "Hey Siri"?** Siri listens on a low-power chip inside the Mac that only
+  Siri may use, so it shows no mic indicator. Any other app that listens has the mic open
+  and macOS shows the orange dot; no app can avoid that. Hence the switch: voice on when
+  you want it, mic closed when you don't.
 
 - **Why Jarvis:** speech in 8 voices through the on-device recogniser came back as
   "Jarvis" 47 times out of 48 and as "Sleight" 0 times ("slide", "slight", "paste

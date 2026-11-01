@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import Carbon.HIToolbox
+import Combine
 import SleightCore
 import SleightBrand
 
@@ -10,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let voice = VoiceListener()
     private let menus = MenuIndex()
     private var idleTimer: Timer?
+    private var subscriptions = Set<AnyCancellable>()
     private var lastHandSeen = CACurrentMediaTime()
     private var voiceItem = NSMenuItem()
     private(set) var overlay: Overlay!
@@ -44,8 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.applicationIconImage = Brand.appIconImage(size: 512)
         overlay = Overlay(shared: pipeline.shared)
-        overlay.showStats = store.showStats
-        overlay.showHints = store.showHints
+        // Settings and the menu both change these; the overlay follows either.
+        store.$showStats.sink { [weak self] on in self?.overlay.showStats = on; self?.refreshMenuSoon() }.store(in: &subscriptions)
+        store.$showHints.sink { [weak self] on in self?.overlay.showHints = on; self?.refreshMenuSoon() }.store(in: &subscriptions)
         pipeline.apply(config: store.config)
         pipeline.camera.preferredDeviceID = store.preferredCameraID
         overlay.gestures = store.config.gestures
@@ -145,12 +148,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.overlay.flash(Chip(symbol: "waveform", title: text, detail: nil, accent: true), seconds: 1.6)
         }
         voice.onIntent = { [weak self] intent in self?.perform(intent) }
-        if store.config.voiceEnabled { voice.start() }
+        pipeline.inputMonitor.onDoubleTap = { [weak self] in self?.toggleVoice() }
+        applyVoice(store.config)
     }
 
     private func applyVoice(_ cfg: SleightConfig) {
         guard voice.onIntent != nil else { return }   // not set up (benchmark, snapshots…)
         voice.config = cfg
+        pipeline.inputMonitor.doubleTapFlag = Self.flag(cfg.voiceDoubleTap)
         if cfg.voiceEnabled, !voice.running {
             voice.start()
         } else if !cfg.voiceEnabled, voice.running {
@@ -159,11 +164,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshMenu()
     }
 
+    private static func flag(_ key: DoubleTapKey) -> CGEventFlags? {
+        switch key {
+        case .off: return nil
+        case .option: return .maskAlternate
+        case .command: return .maskCommand
+        case .control: return .maskControl
+        case .fn: return .maskSecondaryFn
+        }
+    }
+
+    /// Voice mode on (listening for a command straight away) or off (mic closed).
     @objc func toggleVoice() {
+        if !store.config.voiceEnabled { voice.listenOnStart = true }
         store.config.voiceEnabled.toggle()
-        if store.config.voiceEnabled {
-            overlay.flash(Chip(symbol: "waveform", title: "Voice on",
-                               detail: "say \u{201C}\(store.config.wakeWord.phrase), …\u{201D}", accent: true), seconds: 1.6)
+        if !store.config.voiceEnabled {
+            overlay.flash(Chip(symbol: "mic.slash", title: "Voice off", detail: "microphone closed", accent: true), seconds: 1.4)
         }
     }
 
@@ -172,7 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Voice can bring the camera back, so it needn't run with nobody there.
     private func checkIdleCamera() {
         let now = CACurrentMediaTime()
-        guard enabled, voice.running, store.config.cameraIdleMinutes > 0, practice?.window?.isVisible != true else {
+        guard enabled, store.config.voiceEnabled, store.config.cameraIdleMinutes > 0, practice?.window?.isVisible != true else {
             lastHandSeen = now
             return
         }
@@ -436,6 +452,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if menu == statusItem.menu { menuTimer?.invalidate(); menuTimer = nil }
     }
 
+    private func refreshMenuSoon() {
+        DispatchQueue.main.async { [weak self] in if self?.statusItem != nil { self?.refreshMenu() } }
+    }
+
     private func refreshMenu() {
         enableItem.state = enabled ? .on : .off
         voiceItem.state = store.config.voiceEnabled ? .on : .off
@@ -478,13 +498,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleStats() {
         store.showStats.toggle()
-        overlay.showStats = store.showStats
         refreshMenu()
     }
 
     @objc private func toggleHints() {
         store.showHints.toggle()
-        overlay.showHints = store.showHints
         refreshMenu()
     }
 

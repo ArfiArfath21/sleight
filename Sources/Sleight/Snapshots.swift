@@ -74,18 +74,21 @@ enum Snapshots {
             try? png.write(to: dir.appendingPathComponent("practice.png"))
         }
 
-        // Settings, through a real hosting view (Form controls don't render offscreen otherwise).
-        let host = NSHostingView(rootView: SettingsView(store: store).frame(width: 560, height: 1500))
-        host.appearance = NSAppearance(named: .aqua)
-        host.frame = NSRect(x: 0, y: 0, width: 560, height: 1500)
-        let win = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
-        win.appearance = NSAppearance(named: .aqua)
-        win.contentView = host
-        host.layoutSubtreeIfNeeded()
-        host.display()
-        if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
-            host.cacheDisplay(in: host.bounds, to: rep)
-            try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("settings.png"))
+        // Each settings tab, through a real hosting view (Form controls don't render offscreen otherwise).
+        for tab in SettingsTab.allCases {
+            let host = NSHostingView(rootView: SettingsTabView(tab: tab, store: store))
+            host.appearance = NSAppearance(named: .aqua)
+            host.frame = NSRect(x: 0, y: 0, width: 580, height: tab.height)
+            let win = NSWindow(contentRect: host.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            win.appearance = NSAppearance(named: .aqua)
+            win.contentView = host
+            host.layoutSubtreeIfNeeded()
+            host.display()
+            if let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+                host.cacheDisplay(in: host.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: dir.appendingPathComponent("settings-\(tab.rawValue).png"))
+            }
         }
 
         if let png = Brand.iconPNG(pixels: 1024) { try? png.write(to: dir.appendingPathComponent("logo.png")) }

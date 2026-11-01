@@ -160,6 +160,9 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     /// Listen for "Jarvis, …" (the mic stays open while on).
     public var voiceEnabled: Bool = true
     public var wakeWord: WakeWord = .jarvis
+    /// Double-tap this key to turn voice on (and start listening) or off.
+    /// Off, the mic is closed.
+    public var voiceDoubleTap: DoubleTapKey = .option
     /// After "hey Sleight" on its own, wait this long for the command.
     public var voiceListenWindow: Double = 5
     /// A command is taken once the words stop changing for this long.
@@ -189,5 +192,20 @@ extension SleightConfig {
         for (k, v) in saved where merged[k] != nil { merged[k] = v }
         let mergedData = try JSONSerialization.data(withJSONObject: merged)
         return try JSONDecoder().decode(SleightConfig.self, from: mergedData)
+    }
+}
+
+/// The key to double-tap to turn voice on or off.
+public enum DoubleTapKey: String, Codable, CaseIterable, Sendable {
+    case off, option, command, control, fn
+
+    public var title: String {
+        switch self {
+        case .off: return "Off"
+        case .option: return "⌥ Option"
+        case .command: return "⌘ Command"
+        case .control: return "⌃ Control"
+        case .fn: return "fn / 🌐"
+        }
     }
 }

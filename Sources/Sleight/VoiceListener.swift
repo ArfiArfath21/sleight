@@ -31,6 +31,9 @@ final class VoiceListener {
 
     private(set) var state: State = .off { didSet { if state != oldValue { onState?(state) } } }
     private(set) var running = false
+    /// Listen for a command straight away once started (voice just turned on).
+    var listenOnStart = false
+    private var starting = false
 
     private let audio = AVAudioEngine()
     private var recognizer: SFSpeechRecognizer?
@@ -55,8 +58,11 @@ final class VoiceListener {
     /// Starts listening (asking for permission the first time).
     func start(oneShot: Bool = false, completion: ((Bool) -> Void)? = nil) {
         if running { completion?(true); return }
+        guard !starting else { return }
+        starting = true
         Self.authorize { [weak self] error in
             guard let self else { return }
+            self.starting = false
             if let error {
                 self.state = .unavailable(error)
                 completion?(false)
@@ -69,6 +75,11 @@ final class VoiceListener {
                 self.failures = 0
                 self.state = .waiting
                 self.newTask()
+                if self.listenOnStart {
+                    self.listenOnStart = false
+                    self.pushToTalk = true
+                    self.arm()
+                }
                 completion?(true)
             } catch {
                 self.state = .unavailable("Microphone unavailable")

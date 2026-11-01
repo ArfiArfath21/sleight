@@ -16,6 +16,13 @@ final class InputMonitor {
     /// Host time (CACurrentMediaTime) of the last real input.
     var lastRealInput: Double? { lock.withLock { _lastRealInput } }
 
+    /// Double-tapping this modifier on its own calls `onDoubleTap` (voice).
+    var doubleTapFlag: CGEventFlags?
+    var onDoubleTap: (() -> Void)?
+    private var modifierDownAt = 0.0
+    private var modifierClean = false
+    private var lastModifierTap = 0.0
+
     init(shared: SharedState) { self.shared = shared }
 
     /// The on-screen keyboard calls this right before posting a key, as a second
@@ -24,7 +31,7 @@ final class InputMonitor {
 
     @discardableResult
     func start() -> Bool {
-        let types: [CGEventType] = [.keyDown, .mouseMoved, .leftMouseDown, .rightMouseDown,
+        let types: [CGEventType] = [.keyDown, .flagsChanged, .mouseMoved, .leftMouseDown, .rightMouseDown,
                                     .leftMouseDragged, .scrollWheel, .otherMouseDown]
         let mask = types.reduce(CGEventMask(0)) { $0 | (1 << CGEventMask($1.rawValue)) }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
@@ -50,12 +57,18 @@ final class InputMonitor {
         }
         if event.getIntegerValueField(.eventSourceUserData) == EventInjector.tag { return }
         let now = CACurrentMediaTime()
+        if type == .flagsChanged {
+            noteModifier(event.flags, at: now)
+            return   // a modifier alone isn't typing
+        }
         switch type {
         case .keyDown:
+            modifierClean = false
+            lastModifierTap = 0
             if lock.withLock({ now - lastOwnKey < 0.05 }) { return }
             // Our own hotkeys (⌃⌥S/P/K) should not count as "typing".
             let code = Int(event.getIntegerValueField(.keyboardEventKeycode))
-            if [kVK_ANSI_S, kVK_ANSI_P, kVK_ANSI_K].contains(code),
+            if [kVK_ANSI_S, kVK_ANSI_P, kVK_ANSI_K, kVK_ANSI_V].contains(code),
                event.flags.contains([.maskControl, .maskAlternate]) { return }
         case .mouseMoved, .leftMouseDragged, .leftMouseDown, .rightMouseDown:
             let p = event.location
@@ -66,6 +79,28 @@ final class InputMonitor {
             break
         }
         lock.withLock { _lastRealInput = now }
+    }
+
+    /// Two quick taps of the chosen modifier, alone, with nothing in between.
+    private func noteModifier(_ flags: CGEventFlags, at now: Double) {
+        guard let target = doubleTapFlag else { return }
+        let held = flags.intersection([.maskCommand, .maskAlternate, .maskControl, .maskShift, .maskSecondaryFn])
+        if held == target {
+            modifierDownAt = now
+            modifierClean = true
+        } else if held.isEmpty, modifierClean, now - modifierDownAt < 0.35 {
+            modifierClean = false
+            if now - lastModifierTap < 0.45 {
+                lastModifierTap = 0
+                DispatchQueue.main.async { self.onDoubleTap?() }
+            } else {
+                lastModifierTap = now
+            }
+        } else {
+            // Another modifier joined in (a shortcut): not a tap.
+            modifierClean = false
+            lastModifierTap = 0
+        }
     }
 }
 
