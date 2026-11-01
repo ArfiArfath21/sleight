@@ -156,6 +156,25 @@ final class EventInjector {
         case .screenshotTool: key(KeyCode.five, flags: [.maskCommand, .maskShift])
         case .spotlight: key(KeyCode.space, flags: .maskCommand)
         case .lockScreen: key(KeyCode.q, flags: [.maskCommand, .maskControl])
+        case .closeTab: key(KeyCode.w, flags: .maskCommand)
+        case .newWindow: key(KeyCode.n, flags: .maskCommand)
+        case .quitApp: key(KeyCode.q, flags: .maskCommand)
+        case .undo: key(KeyCode.z, flags: .maskCommand)
+        case .redo: key(KeyCode.z, flags: [.maskCommand, .maskShift])
+        case .cut: key(KeyCode.x, flags: .maskCommand)
+        case .copy: key(KeyCode.c, flags: .maskCommand)
+        case .paste: key(KeyCode.v, flags: .maskCommand)
+        case .selectAll: key(KeyCode.a, flags: .maskCommand)
+        case .save: key(KeyCode.s, flags: .maskCommand)
+        case .find: key(KeyCode.f, flags: .maskCommand)
+        case .reload: key(KeyCode.r, flags: .maskCommand)
+        case .scrollToTop: key(KeyCode.up, flags: arrows.union(.maskCommand))
+        case .scrollToBottom: key(KeyCode.down, flags: arrows.union(.maskCommand))
+        case .returnKey: key(KeyCode.returnKey)
+        case .escapeKey: key(KeyCode.escape)
+        case .tabKey: key(KeyCode.tab)
+        case .spaceKey: key(KeyCode.space)
+        case .deleteKey: key(KeyCode.delete)
         }
     }
 
@@ -229,4 +248,12 @@ enum KeyCode {
     static let m: CGKeyCode = 46
     static let f: CGKeyCode = 3
     static let q: CGKeyCode = 12
+    static let s: CGKeyCode = 1
+    static let z: CGKeyCode = 6
+    static let x: CGKeyCode = 7
+    static let c: CGKeyCode = 8
+    static let v: CGKeyCode = 9
+    static let w: CGKeyCode = 13
+    static let r: CGKeyCode = 15
+    static let n: CGKeyCode = 45
 }

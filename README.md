@@ -26,7 +26,7 @@ desktop, take a screenshot, and anything else you assign. Gestures depend on **w
 can raise a hand anywhere in view and flick. When you do need to aim, point and hold to
 get a cursor, then make a fist to put it away.
 
-For things a gesture can't name, say it: **"hey Sleight, switch to Claude"**.
+For things a gesture can't name, say it: **"Jarvis, switch to Claude"**.
 
 It is a native Swift menu bar app. Apple's Vision hand-pose model runs on the Neural
 Engine (~8 ms per frame), speech is recognised on-device, events go straight to the
@@ -133,28 +133,37 @@ highlight on hover.
 ## Voice commands
 
 Hands are best for quick, continuous things (scrolling, flicking, sliding). Voice is
-best for things with a name. Turn on **Voice Commands** in the menu bar, then:
+best for things with a name. Voice is on by default and the wake word is **Jarvis**:
 
 | Say | Does |
 |---|---|
-| "hey Sleight, switch to Claude" | Brings any app forward, opening it if needed ("open Safari", "go to Slack") |
-| "hey Sleight, scroll down" · "go back" · "next tab" · "mission control" | Any action in the gesture list, by name |
-| "hey Sleight, next tab twice" · "scroll down 3 times" | Repeats |
-| "hey Sleight, pause" · "next track" · "volume up" · "mute" | Media keys |
-| "hey Sleight, type see you at six" | Types into whatever has focus |
-| "hey Sleight, search for flights to Goa" | Spotlight |
-| "hey Sleight, rest" · "wake up" | Rests gestures and voice; while resting only "wake up" works |
-| "hey Sleight, pointer mode" | Pointer mode without the gesture |
+| "Jarvis, camera on" · "camera off" | Starts or stops the camera. It starts **off**, and switches itself off after 5 minutes with no hands |
+| "Jarvis, switch to Claude" · "open Safari" · "quit Slack" | Any app: brings it forward (opening it if needed) or quits it |
+| "Jarvis, export as PDF" · "new Finder window" | **Any menu command of the app in front**, by its name |
+| "Jarvis, scroll down" · "go back" · "next tab" · "mission control" | Any action in the gesture list |
+| "Jarvis, undo" · "copy" · "paste" · "save" · "close tab" · "reload" · "press enter" | Everyday shortcuts and keys |
+| "Jarvis, next tab twice" · "undo 3 times" | Repeats |
+| "Jarvis, pause" · "next track" · "volume 30" · "mute" | Media and volume |
+| "Jarvis, open github.com" · "google best ramen" | Websites and web search |
+| "Jarvis, search for invoices" | Spotlight |
+| "Jarvis, run Morning Routine" | Any of your Apple Shortcuts, which makes the list open-ended |
+| "Jarvis, type see you at six" | Types into whatever has focus |
+| "Jarvis, rest" · "wake up" | Rests gestures and voice; while resting only "wake up" works |
 
-You can also say "hey Sleight", pause, then the command. A chip shows what it heard as
-you speak. `⌃⌥V` takes one command without the wake phrase, even with voice off.
+You can also say "Jarvis", pause, then the command. A chip shows what it heard as you
+speak. `⌃⌥V` takes one command without the wake word, even with voice off.
 
+- **Why Jarvis:** speech in 8 voices through the on-device recogniser came back as
+  "Jarvis" 47 times out of 48 and as "Sleight" 0 times ("slide", "slight", "paste
+  light"). Computer, Friday and "hey Sleight" are in Settings.
+- **Context:** the recogniser is primed with what makes sense right now (your apps,
+  your Shortcuts, and the menu commands of the app in front), and those words are
+  accepted as commands. Near misses ("camera of", "new find the window") still land.
+- **Never by accident:** the wake word in the middle of a sentence ("I asked Jarvis
+  yesterday") does nothing; whatever follows it must be a command.
 - **On-device:** Apple's speech recogniser in on-device mode. Nothing is sent anywhere.
-- **The name:** recognisers rarely spell "Sleight" right ("slight", "slide", "sleigh",
-  "Heli"), so close forms count. Weak ones only count when a real command follows, so
-  "we had a slight problem" does nothing.
-- **The mic stays open** while voice is on (the orange dot shows). Use push to talk if
-  you'd rather it didn't.
+  The mic stays open while voice is on (the orange dot shows); push to talk if you'd
+  rather it didn't.
 
 ## Install
 
@@ -235,7 +244,7 @@ term.
 | **Accidental media** | OK sign required, closed from open fingers, held still before sliding. |
 | **Flicks near the bottom of the frame** | A flick that starts in view is followed even when it carries the hand into the ignored keyboard zone. |
 | **Wrist-snap flicks** | Flicks are measured between the palm and the fingertips, so a snap of the wrist counts. |
-| **Voice firing on conversation** | Needs "hey Sleight" before a command it knows; unknown sentences are dropped, and the name alone in a sentence never wakes it. |
+| **Voice firing on conversation** | The wake word must be followed by a command it knows; unknown sentences are dropped, and the wake word mid-sentence never fires. |
 | **HUD in your screenshot** | Sleight's own overlay is excluded from screen capture and sharing. |
 | **Ghost hands** in dark rooms | Low-confidence detections are rejected (a real dark-room recording is a regression test). |
 | **Background people** | Tiny hands are ignored; the hand doing a gesture keeps it even if another appears. |
@@ -253,17 +262,18 @@ Sources/
     HandTracks          up to two hands across frames: filtering, debounced shape and pinch
     Flick               deliberate-flick detector (settle, dominance, return-stroke lockout)
     Mapping             gesture slots, the action list, defaults, action → OS events
-    Voice               wake phrase, spoken commands → intents, app-name matching
+    Voice               wake words, spoken commands → intents, fuzzy app / menu / shortcut matching
     CommandEngine       one-hand recognisers (skips gestures set to Nothing)
     TwoHandGestures     hands up (rest/wake), curtains, frame, double clap
     PointerEngine       pointer mode
     SleightEngine       active/resting, mode switching, real-input override
   Sleight/            the app: camera, Vision, output (glide, momentum, media keys, ⌘-Tab),
-                      input monitor, voice listener (on-device speech), app index,
+                      input monitor, voice listener (on-device speech), app, menu and
+                      Shortcuts indexes,
                       overlay chip + ring + intro, mode bar, keyboard,
                       menu bar, settings, guide, preview & tuning
   SleightBrand/       the logo, drawn in code
-Tests/SleightCoreTests  92 tests, including a real dark-room replay
+Tests/SleightCoreTests  98 tests, including a real dark-room replay
 ```
 
 ## The name and the mark

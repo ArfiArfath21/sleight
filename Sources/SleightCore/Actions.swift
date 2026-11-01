@@ -26,6 +26,11 @@ public enum Shortcut: String, Codable, Sendable {
     case fullScreen               // ⌃⌘F
     case zoomIn, zoomOut          // ⌘= ⌘-
     case arrowLeft, arrowRight, arrowUp, arrowDown
+    case closeTab, newWindow, quitApp          // ⌘W ⌘N ⌘Q
+    case undo, redo, cut, copy, paste, selectAll // ⌘Z ⌘⇧Z ⌘X ⌘C ⌘V ⌘A
+    case save, find, reload                    // ⌘S ⌘F ⌘R
+    case scrollToTop, scrollToBottom           // ⌘↑ ⌘↓
+    case returnKey, escapeKey, tabKey, spaceKey, deleteKey
     case screenshot               // ⌘⇧3
     case screenshotSelection      // ⌘⇧4
     case screenshotTool           // ⌘⇧5

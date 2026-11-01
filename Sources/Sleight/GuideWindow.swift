@@ -4,8 +4,8 @@ import SleightBrand
 import SleightCore
 
 enum GuideWindow {
-    static func make(map: GestureMap, onPractice: (() -> Void)? = nil) -> NSWindow {
-        let host = NSHostingController(rootView: GuideView(onPractice: onPractice, map: map))
+    static func make(map: GestureMap, wakeWord: WakeWord = .jarvis, onPractice: (() -> Void)? = nil) -> NSWindow {
+        let host = NSHostingController(rootView: GuideView(onPractice: onPractice, map: map, wakeWord: wakeWord))
         let w = NSWindow(contentViewController: host)
         w.title = "Sleight"
         w.styleMask = [.titled, .closable, .fullSizeContentView]
@@ -18,6 +18,7 @@ enum GuideWindow {
 struct GuideView: View {
     var onPractice: (() -> Void)?
     var map = GestureMap()
+    var wakeWord = WakeWord.jarvis
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -55,7 +56,7 @@ struct GuideView: View {
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Text("🎙  VOICE").font(.caption.weight(.semibold)).foregroundStyle(Color(cgColor: Brand.gold))
-                        ForEach(GestureCatalog.voice, id: \.0) { say, does in
+                        ForEach(GestureCatalog.voice(wakeWord), id: \.0) { say, does in
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("\u{201C}\(say)\u{201D}").font(.headline)
                                 Text(does).font(.callout).foregroundStyle(.secondary)

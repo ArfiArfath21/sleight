@@ -24,7 +24,9 @@
   likely better at the name and at short commands.
 - **Own wake-word model** so the recogniser only runs after "hey Sleight" (less power).
 - **Voice + hand:** point at something and say "click", "open this", "close that".
-- **Custom phrases** per action, and spoken custom shortcuts.
+- **Custom phrases** per action, and spoken custom shortcuts (Apple Shortcuts already work).
+- **On-screen words:** "click Submit" via the Accessibility tree of the front window
+  (buttons and links), the reliable cousin of screen OCR.
 - Skip listening while a call app (Zoom, Meet, FaceTime) has the mic.
 
 ## Speed

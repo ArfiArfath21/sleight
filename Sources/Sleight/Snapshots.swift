@@ -49,7 +49,7 @@ enum Snapshots {
         }
         write(kbImage, to: dir.appendingPathComponent("keyboard.png"), scale: scale)
 
-        let r = ImageRenderer(content: GuideView()
+        let r = ImageRenderer(content: GuideView(wakeWord: .jarvis)
             .background(Color(red: 0.07, green: 0.08, blue: 0.11))
             .environment(\.colorScheme, .dark))
         r.scale = scale

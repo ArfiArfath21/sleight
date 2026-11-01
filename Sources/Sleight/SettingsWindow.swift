@@ -36,11 +36,19 @@ struct SettingsView: View {
                 }
             }
             Section("Voice") {
-                Toggle("Listen for \u{201C}hey Sleight\u{201D}", isOn: $store.config.voiceEnabled)
+                Toggle("Listen for \u{201C}\(store.config.wakeWord.phrase)\u{201D}", isOn: $store.config.voiceEnabled)
+                Picker("Wake word", selection: $store.config.wakeWord) {
+                    ForEach(WakeWord.allCases, id: \.self) { w in Text(w.phrase).tag(w) }
+                }
+                Text("Jarvis is recognised most reliably. \u{201C}Sleight\u{201D} is often heard as \u{201C}slight\u{201D} or \u{201C}slide\u{201D}, so it needs \u{201C}hey\u{201D}.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Toggle("Turn the camera on at launch", isOn: $store.config.cameraAtLaunch)
+                Tunable("Camera off after no hands for", value: $store.config.cameraIdleMinutes, range: 0...30, format: "%.0f min",
+                        help: "Only while voice is on, so \u{201C}camera on\u{201D} brings it back. 0 = never.")
                 Text("Keeps the microphone open (the orange dot stays on). Recognition runs on your Mac. ⌃⌥V speaks one command without the wake phrase, even with this off.")
                     .font(.caption).foregroundStyle(.secondary)
                 Tunable("Wait for the command", value: $store.config.voiceListenWindow, range: 2...10, format: "%.0f s",
-                        help: "After \u{201C}hey Sleight\u{201D} on its own.")
+                        help: "After the wake word on its own.")
                 Tunable("Pause that ends a command", value: $store.config.voiceSettle, range: 0.3...1.5, format: "%.1f s",
                         help: "Shorter is snappier; longer gives app names time to arrive.")
             }

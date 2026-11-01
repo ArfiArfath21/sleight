@@ -63,17 +63,22 @@ enum GestureCatalog {
     ]
 
     /// Voice commands, for the Guide and Settings: (what to say, what happens).
-    static let voice: [(String, String)] = [
-        ("hey Sleight, switch to Claude", "Brings any app forward, opening it if needed"),
-        ("hey Sleight, scroll down / go back / next tab", "Any action in the gesture list, by name"),
-        ("hey Sleight, next tab twice", "Add \"twice\" or \"3 times\" to repeat"),
-        ("hey Sleight, pause / next track / volume up", "Media keys"),
-        ("hey Sleight, type see you at six", "Types the words into whatever has focus"),
-        ("hey Sleight, search for flights to Goa", "Spotlight search"),
-        ("hey Sleight, rest / wake up", "Rests gestures and voice; only \"wake up\" works while resting"),
-        ("hey Sleight, pointer mode", "Pointer mode, without the gesture"),
-        ("⌃⌥V, then speak", "Push to talk: no wake phrase, works with voice off"),
-    ]
+    static func voice(_ w: WakeWord) -> [(String, String)] {
+        let p = w.phrase
+        return [
+            ("\(p), camera on / camera off", "Starts or stops the camera (and gestures)"),
+            ("\(p), switch to Claude", "Brings any app forward, opening it if needed"),
+            ("\(p), scroll down / go back / next tab", "Any action in the gesture list, by name"),
+            ("\(p), export as PDF", "Any menu command of the app in front, by its name"),
+            ("\(p), next tab twice", "Add \"twice\" or \"3 times\" to repeat"),
+            ("\(p), pause / next track / volume up", "Media keys"),
+            ("\(p), type see you at six", "Types the words into whatever has focus"),
+            ("\(p), search for flights to Goa", "Spotlight search"),
+            ("\(p), rest / wake up", "Rests gestures and voice; only \"wake up\" works while resting"),
+            ("\(p), pointer mode", "Pointer mode, without the gesture"),
+            ("⌃⌥V, then speak", "Push to talk: no wake word, works with voice off"),
+        ]
+    }
 
     static var groups: [String] {
         var seen: [String] = []
@@ -138,6 +143,25 @@ enum GestureCatalog {
         case .toggleKeyboard: return "keyboard"
         case .restWake: return "moon"
         case .stepBrightness: return "sun.max"
+        case .closeTab: return "xmark.square"
+        case .newWindow: return "macwindow.badge.plus"
+        case .quitApp: return "power"
+        case .undo: return "arrow.uturn.backward"
+        case .redo: return "arrow.uturn.forward"
+        case .cut: return "scissors"
+        case .copy: return "doc.on.doc"
+        case .paste: return "doc.on.clipboard"
+        case .selectAll: return "selection.pin.in.out"
+        case .save: return "square.and.arrow.down"
+        case .find: return "magnifyingglass"
+        case .reload: return "arrow.clockwise"
+        case .scrollToTop: return "arrow.up.to.line"
+        case .scrollToBottom: return "arrow.down.to.line"
+        case .returnKey: return "return"
+        case .escapeKey: return "escape"
+        case .tabKey: return "arrow.right.to.line"
+        case .spaceKey: return "space"
+        case .deleteKey: return "delete.left"
         }
     }
 }

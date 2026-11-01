@@ -157,12 +157,18 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var momentumDecay: Double = 0.4
 
     // MARK: Voice
-    /// Listen for "hey Sleight, …" (off until turned on: the mic stays open).
-    public var voiceEnabled: Bool = false
+    /// Listen for "Jarvis, …" (the mic stays open while on).
+    public var voiceEnabled: Bool = true
+    public var wakeWord: WakeWord = .jarvis
     /// After "hey Sleight" on its own, wait this long for the command.
     public var voiceListenWindow: Double = 5
     /// A command is taken once the words stop changing for this long.
     public var voiceSettle: Double = 0.7
+    /// Start the camera at launch. Off: say "Jarvis, camera on" (or ⌃⌥S).
+    public var cameraAtLaunch: Bool = false
+    /// Turn the camera off after this many minutes without a hand in view
+    /// (only while voice is on, so it can be turned back on). 0 = never.
+    public var cameraIdleMinutes: Double = 5
 
     // MARK: What each gesture does
     public var gestures = GestureMap()

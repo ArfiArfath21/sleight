@@ -48,6 +48,8 @@ public enum ActionID: String, Codable, CaseIterable, Sendable {
     case zoomIn, zoomOut, arrowLeft, arrowRight, arrowUp, arrowDown
     // Capture & system
     case screenshot, screenshotSelection, screenshotTool, spotlight, lockScreen
+    // Edit, keys and more (one-shot keyboard shortcuts)
+    case closeTab, newWindow, quitApp, undo, redo, cut, copy, paste, selectAll, save, find, reload, scrollToTop, scrollToBottom, returnKey, escapeKey, tabKey, spaceKey, deleteKey
     // Sleight
     case toggleKeyboard, restWake
     // Step actions, for sliders: one step per stretch of hand travel.
@@ -94,6 +96,25 @@ public enum ActionID: String, Codable, CaseIterable, Sendable {
         case .spotlight: return "Spotlight"
         case .lockScreen: return "Lock screen"
         case .toggleKeyboard: return "On-screen keyboard"
+        case .closeTab: return "Close tab / window"
+        case .newWindow: return "New window"
+        case .quitApp: return "Quit app"
+        case .undo: return "Undo"
+        case .redo: return "Redo"
+        case .cut: return "Cut"
+        case .copy: return "Copy"
+        case .paste: return "Paste"
+        case .selectAll: return "Select all"
+        case .save: return "Save"
+        case .find: return "Find"
+        case .reload: return "Reload"
+        case .scrollToTop: return "Scroll to top"
+        case .scrollToBottom: return "Scroll to bottom"
+        case .returnKey: return "Return key"
+        case .escapeKey: return "Escape key"
+        case .tabKey: return "Tab key"
+        case .spaceKey: return "Space bar"
+        case .deleteKey: return "Delete key"
         case .restWake: return "Rest / wake Sleight"
         case .stepAppSwitcher: return "App switcher"
         case .stepVolume: return "Volume"
@@ -117,6 +138,25 @@ public enum ActionID: String, Codable, CaseIterable, Sendable {
         case .zoomIn, .zoomOut, .arrowLeft, .arrowRight, .arrowUp, .arrowDown: return "View & keys"
         case .screenshot, .screenshotSelection, .screenshotTool, .spotlight, .lockScreen: return "System"
         case .toggleKeyboard, .restWake: return "Sleight"
+        case .closeTab: return "Browse"
+        case .newWindow: return "Windows"
+        case .quitApp: return "Windows"
+        case .undo: return "Edit"
+        case .redo: return "Edit"
+        case .cut: return "Edit"
+        case .copy: return "Edit"
+        case .paste: return "Edit"
+        case .selectAll: return "Edit"
+        case .save: return "Edit"
+        case .find: return "Edit"
+        case .reload: return "Browse"
+        case .scrollToTop: return "Scroll"
+        case .scrollToBottom: return "Scroll"
+        case .returnKey: return "View & keys"
+        case .escapeKey: return "View & keys"
+        case .tabKey: return "View & keys"
+        case .spaceKey: return "View & keys"
+        case .deleteKey: return "View & keys"
         default: return "Slide to step"
         }
     }
@@ -211,6 +251,8 @@ public enum ActionMapper {
         case .spotlight: return [.shortcut(.spotlight)]
         case .lockScreen: return [.shortcut(.lockScreen)]
         case .toggleKeyboard: return [.toggleKeyboard]
+        case .closeTab, .newWindow, .quitApp, .undo, .redo, .cut, .copy, .paste, .selectAll, .save, .find, .reload, .scrollToTop, .scrollToBottom, .returnKey, .escapeKey, .tabKey, .spaceKey, .deleteKey:
+            return Shortcut(rawValue: a.rawValue).map { [.shortcut($0)] } ?? []
         case .restWake: return []   // handled by the engine (it owns active/resting)
         case .stepAppSwitcher, .stepVolume, .stepTabs, .stepZoom, .stepDesktops,
              .stepArrowsHorizontal, .stepArrowsVertical, .stepBrightness:

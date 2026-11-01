@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let store = ConfigStore()
     let pipeline = Pipeline()
     let voice = VoiceListener()
+    private let menus = MenuIndex()
+    private var idleTimer: Timer?
+    private var lastHandSeen = CACurrentMediaTime()
     private var voiceItem = NSMenuItem()
     private(set) var overlay: Overlay!
     private var statusItem: NSStatusItem!
@@ -51,7 +54,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.overlay.gestures = cfg.gestures
             self?.applyVoice(cfg)
         }
-        setupVoice()
         pipeline.output.onEvent = { [weak self] action in self?.handle(action) }
 
         modeBar.onKeyboard = { [weak self] in self?.keyboard.toggle() }
@@ -91,10 +93,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         if launchOptions.selfTest { runSelfTest(); return }
+        if let dir = launchOptions.transcribeDir {
+            VoiceListener.transcribe(folder: URL(fileURLWithPath: dir)) { NSApp.terminate(nil) }
+            return
+        }
         if let seconds = launchOptions.benchmarkSeconds { runHeadlessBenchmark(seconds: seconds); return }
 
         checkPermissions()
-        setEnabled(true)
+        setupVoice()
+        // With voice on, the camera waits to be asked for ("Jarvis, camera on").
+        if store.config.cameraAtLaunch || !store.config.voiceEnabled {
+            setEnabled(true)
+        } else {
+            overlay.flash(Chip(symbol: "waveform", title: "Sleight is listening",
+                               detail: "say \u{201C}\(store.config.wakeWord.phrase), camera on\u{201D}", accent: true), seconds: 3)
+        }
+        idleTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.checkIdleCamera() }
         if !UserDefaults.standard.bool(forKey: "seenPractice") {
             UserDefaults.standard.set(true, forKey: "seenPractice")
             showPractice()
@@ -110,7 +124,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setupVoice() {
         voice.config = store.config
-        voice.vocabulary = { AppIndex.names() }
+        voice.vocabulary = { AppIndex.names() + ShortcutsIndex.shared.all }
+        voice.menuTitles = { [menus] in menus.titles }
+        menus.onChange = { [weak self] in self?.voice.contextChanged() }
         voice.onState = { [weak self] state in
             guard let self else { return }
             switch state {
@@ -120,7 +136,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .unavailable(let why):
                 self.overlay.voiceChip = nil
                 self.overlay.flash(Chip(symbol: "mic.slash", title: "Voice unavailable", detail: why, accent: true), seconds: 3)
-                if self.store.config.voiceEnabled { self.store.config.voiceEnabled = false }
             case .off, .waiting:
                 self.overlay.voiceChip = nil
             }
@@ -134,6 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func applyVoice(_ cfg: SleightConfig) {
+        guard voice.onIntent != nil else { return }   // not set up (benchmark, snapshots…)
         voice.config = cfg
         if cfg.voiceEnabled, !voice.running {
             voice.start()
@@ -146,11 +162,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func toggleVoice() {
         store.config.voiceEnabled.toggle()
         if store.config.voiceEnabled {
-            overlay.flash(Chip(symbol: "waveform", title: "Voice on", detail: "say \"hey Sleight, …\"", accent: true), seconds: 1.6)
+            overlay.flash(Chip(symbol: "waveform", title: "Voice on",
+                               detail: "say \u{201C}\(store.config.wakeWord.phrase), …\u{201D}", accent: true), seconds: 1.6)
         }
     }
 
     @objc func speakNow() { voice.listenNow() }
+
+    /// Voice can bring the camera back, so it needn't run with nobody there.
+    private func checkIdleCamera() {
+        let now = CACurrentMediaTime()
+        guard enabled, voice.running, store.config.cameraIdleMinutes > 0, practice?.window?.isVisible != true else {
+            lastHandSeen = now
+            return
+        }
+        if pipeline.shared.hud.handsVisible > 0 { lastHandSeen = now }
+        if now - lastHandSeen > store.config.cameraIdleMinutes * 60 {
+            setEnabled(false)
+            overlay.flash(Chip(symbol: "video.slash", title: "Camera off (no hands for a while)",
+                               detail: "say \u{201C}\(store.config.wakeWord.phrase), camera on\u{201D}", accent: true), seconds: 2.5)
+        }
+    }
 
     private func perform(_ intent: VoiceIntent) {
         NSLog("Sleight voice intent: \(intent)")
@@ -182,6 +214,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pipeline.setActive(false)
         case .wake:
             if gesturesActive { say("sparkle", "Already awake") } else { pipeline.setActive(true) }
+        case .cameraOn:
+            if enabled { say("video", "Camera is on") } else { setEnabled(true) }
+            if !gesturesActive { pipeline.setActive(true) }
+        case .cameraOff:
+            if enabled {
+                setEnabled(false)
+                say("video.slash", "Camera off")
+            }
+        case .menuItem(let title):
+            if menus.press(title) { say("filemenu.and.selection", title) } else { say("questionmark", "Couldn't press \u{201C}\(title)\u{201D}") }
+        case .openURL(let site):
+            if let url = URL(string: "https://" + site) {
+                NSWorkspace.shared.open(url)
+                say("safari", site)
+            }
+        case .webSearch(let query):
+            var c = URLComponents(string: "https://www.google.com/search")!
+            c.queryItems = [URLQueryItem(name: "q", value: query)]
+            if let url = c.url { NSWorkspace.shared.open(url); say("globe", query) }
+        case .runShortcut(let name):
+            if let match = ShortcutsIndex.shared.find(name) {
+                ShortcutsIndex.run(match)
+                say("square.2.layers.3d", match)
+            } else {
+                say("questionmark", "No shortcut called \u{201C}\(name)\u{201D}")
+            }
+        case .quit(let name):
+            let running = NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }
+            let names = running.compactMap(\.localizedName)
+            if let hit = VoiceCommands.bestApp(for: name, in: names),
+               let app = running.first(where: { $0.localizedName == hit }) {
+                app.terminate()
+                say("power", "Quit \(hit)")
+            } else {
+                say("questionmark.app", "\u{201C}\(name)\u{201D} isn't open")
+            }
+        case .setVolume(let level):
+            NSAppleScript(source: "set volume output volume \(level)")?.executeAndReturnError(nil)
+            say(level == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill", "Volume \(level)")
         case .pointerMode:
             if enabled { pipeline.setMode(.pointer) } else { say("video.slash", "Camera is off") }
         case .gestureMode:
@@ -374,7 +445,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hintsItem.state = store.showHints ? .on : .off
         let q = pipeline.shared.quality
         if !enabled {
-            statusLine.title = "Camera off · ⌃⌥S to start"
+            statusLine.title = store.config.voiceEnabled
+                ? "Camera off · say \u{201C}\(store.config.wakeWord.phrase), camera on\u{201D}"
+                : "Camera off · ⌃⌥S to start"
             qualityLine.title = "Camera is off"
         } else {
             statusLine.title = !gesturesActive ? "Resting · both hands up or ⌃⌥S to wake"
@@ -425,7 +498,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func showGuide() {
         // Rebuilt each time so it shows the current assignments.
         guideWindow?.close()
-        let window = GuideWindow.make(map: store.config.gestures, onPractice: { [weak self] in
+        let window = GuideWindow.make(map: store.config.gestures, wakeWord: store.config.wakeWord, onPractice: { [weak self] in
             self?.guideWindow?.close()
             self?.showPractice()
         })
@@ -538,6 +611,8 @@ struct LaunchOptions {
     var recordSeconds: Double?
     var snapshotDir: String?
     var selfTest = false
+    /// `--transcribe DIR`: print what on-device speech hears in each audio file (wake-word tuning).
+    var transcribeDir: String?
 
     init(arguments: [String]) {
         var it = arguments.dropFirst().makeIterator()
@@ -547,6 +622,7 @@ struct LaunchOptions {
             case "--record": recordSeconds = it.next().flatMap(Double.init) ?? 10
             case "--selftest": selfTest = true
             case "--snapshots": snapshotDir = it.next()
+            case "--transcribe": transcribeDir = it.next()
             default: break
             }
         }

@@ -26,6 +26,8 @@ final class VoiceListener {
     var onMessage: ((String) -> Void)?
     /// Extra words to help the recogniser (app names).
     var vocabulary: () -> [String] = { [] }
+    /// Menu commands of the app in front (titles), also accepted as commands.
+    var menuTitles: () -> [String] = { [] }
 
     private(set) var state: State = .off { didSet { if state != oldValue { onState?(state) } } }
     private(set) var running = false
@@ -137,8 +139,11 @@ final class VoiceListener {
         req.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
         req.addsPunctuation = false
-        req.contextualStrings = ["hey Sleight", "Sleight"] + VoiceCommands.phrases.compactMap { $0.1.first }
-            + Array(vocabulary().prefix(80))
+        // Bias the recogniser towards what makes sense right now: the wake word,
+        // commands, app names, and the menu commands of the app in front.
+        req.contextualStrings = [config.wakeWord.title, config.wakeWord.phrase]
+            + VoiceCommands.phrases.compactMap { $0.1.first }
+            + Array(menuTitles().prefix(60)) + Array(vocabulary().prefix(60))
         requestLock.lock(); request = req; requestLock.unlock()
         generation += 1
         let gen = generation
@@ -187,7 +192,7 @@ final class VoiceListener {
             NSLog("Sleight voice heard: \(text)\(final ? " (final)" : "")")
         }
         if armedUntil == nil {
-            guard let wake = VoiceCommands.wake(in: text) else {
+            guard let wake = VoiceCommands.wake(in: text, word: config.wakeWord) else {
                 // Unrelated talk: start fresh now and then so transcripts stay short.
                 if text.count > 240 || CACurrentMediaTime() - taskStarted > 50 { newTask() }
                 return
@@ -196,7 +201,8 @@ final class VoiceListener {
             update(wake.command, final: final)
         } else {
             // After a restart the transcript no longer starts with the wake phrase.
-            update(VoiceCommands.wake(in: text)?.command ?? VoiceCommands.dropLeadingName(text), final: final)
+            update(VoiceCommands.wake(in: text, word: config.wakeWord)?.command
+                   ?? VoiceCommands.dropLeadingName(text, word: config.wakeWord), final: final)
         }
     }
 
@@ -233,7 +239,7 @@ final class VoiceListener {
         command = text
         state = .listening(text)
         settle?.cancel()
-        guard VoiceCommands.parse(text) != nil else { return }
+        guard parse(text) != nil else { return }
         if final { commit(); return }
         // Wait for the words to stop changing ("switch to" → "switch to Claude").
         let work = DispatchWorkItem { [weak self] in self?.commit() }
@@ -242,17 +248,24 @@ final class VoiceListener {
     }
 
     private func commit() {
-        guard let intent = VoiceCommands.parse(command) else { return }
+        guard let intent = parse(command) else { return }
         let wasOneShot = oneShot
         disarm()
         newTask()
         state = .waiting
         if resting, intent != .wake, intent != .cancel {
-            onMessage?("Resting · say \"hey Sleight, wake up\"")
+            onMessage?("Resting · say \"\(config.wakeWord.phrase), wake up\"")
         } else {
             onIntent?(intent)
         }
         if wasOneShot { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.stopIfOneShot() } }
+    }
+
+    private func parse(_ text: String) -> VoiceIntent? { VoiceCommands.parse(text, menu: menuTitles()) }
+
+    /// The app in front changed: pick up its menu words, unless mid-command.
+    func contextChanged() {
+        if running, armedUntil == nil { newTask() }
     }
 
     private func timedOut() {
@@ -267,5 +280,45 @@ final class VoiceListener {
     private func stopIfOneShot() {
         guard oneShot, armedUntil == nil else { return }
         stop()
+    }
+
+    // MARK: Offline check
+
+    /// Transcribes every audio file in `folder` with the same settings as live
+    /// listening and prints `file<TAB>transcript`. A file named `word__…` gets
+    /// `word` as its contextual hint, like the live wake word.
+    static func transcribe(folder: URL, done: @escaping () -> Void) {
+        authorize { error in
+            if let error { print("error: \(error)"); done(); return }
+            guard let r = SFSpeechRecognizer(locale: Locale(identifier: "en-US")) else { done(); return }
+            let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
+                .filter { ["aiff", "wav", "m4a"].contains($0.pathExtension) }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            var remaining = files[...]
+            func next() {
+                guard let f = remaining.popFirst() else { done(); return }
+                let req = SFSpeechURLRecognitionRequest(url: f)
+                if r.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
+                req.addsPunctuation = false
+                let hint = f.deletingPathExtension().lastPathComponent.components(separatedBy: "__").first ?? ""
+                req.contextualStrings = [hint, "hey " + hint] + VoiceCommands.phrases.compactMap { $0.1.first }
+                var printed = false
+                r.recognitionTask(with: req) { result, error in
+                    guard !printed else { return }
+                    if let result, result.isFinal {
+                        printed = true
+                        print("\(f.lastPathComponent)\t\(result.bestTranscription.formattedString)")
+                        fflush(stdout)
+                        DispatchQueue.main.async { next() }
+                    } else if error != nil {
+                        printed = true
+                        print("\(f.lastPathComponent)\t")
+                        fflush(stdout)
+                        DispatchQueue.main.async { next() }
+                    }
+                }
+            }
+            next()
+        }
     }
 }
