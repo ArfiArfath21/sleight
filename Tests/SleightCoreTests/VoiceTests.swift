@@ -171,3 +171,51 @@ final class VoiceTests: XCTestCase {
         XCTAssertNil(VoiceCommands.bestApp(for: "photoshop", in: apps))
     }
 }
+
+final class KeyVoiceTests: XCTestCase {
+    private func press(_ key: String, _ mods: [KeyModifier] = [], times: Int = 1) -> VoiceIntent {
+        .pressKey(KeyPress(key, modifiers: mods), times: times)
+    }
+
+    func testSpecialKeys() {
+        XCTAssertEqual(VoiceCommands.parse("press page down"), press("pageDown"))
+        XCTAssertEqual(VoiceCommands.parse("hit home"), press("home"))
+        XCTAssertEqual(VoiceCommands.parse("press F5"), press("f5"))
+        XCTAssertEqual(VoiceCommands.parse("press f five"), press("f5"))
+        XCTAssertEqual(VoiceCommands.parse("press down arrow"), press("down"))
+        XCTAssertEqual(VoiceCommands.parse("press forward delete"), press("forwardDelete"))
+        XCTAssertEqual(VoiceCommands.parse("press home 3 times"), press("home", times: 3))
+        XCTAssertEqual(VoiceCommands.parse("press down twice"), press("down", times: 2))
+        XCTAssertEqual(VoiceCommands.parse("please press escape key"), press("escape"))
+        XCTAssertEqual(VoiceCommands.parse("press tab 3 times"), .action(.tabKey, times: 3), "built-in phrases still win")
+    }
+
+    func testCombinations() {
+        XCTAssertEqual(VoiceCommands.parse("press command shift T"), press("t", [.shift, .command]))
+        XCTAssertEqual(VoiceCommands.parse("control c"), press("c", [.control]))
+        XCTAssertEqual(VoiceCommands.parse("press command plus"), press("equals", [.command]))
+        XCTAssertEqual(VoiceCommands.parse("press command and option escape"), press("escape", [.option, .command]))
+        XCTAssertEqual(VoiceCommands.parse("hit command comma"), press("comma", [.command]))
+        XCTAssertEqual(VoiceCommands.parse("press control you"), press("u", [.control]), "letters as heard")
+        XCTAssertEqual(KeyPress("t", modifiers: [.command, .shift]).label, "⇧⌘T")
+    }
+
+    func testHoldAndRelease() {
+        XCTAssertEqual(VoiceCommands.parse("hold shift"), .holdKeys([.shift]))
+        XCTAssertEqual(VoiceCommands.parse("hold down command and shift"), .holdKeys([.shift, .command]))
+        XCTAssertEqual(VoiceCommands.parse("release shift"), .releaseKeys([.shift]))
+        XCTAssertEqual(VoiceCommands.parse("let go of command"), .releaseKeys([.command]))
+        XCTAssertEqual(VoiceCommands.parse("let go"), .releaseKeys([]))
+        XCTAssertEqual(VoiceCommands.parse("release"), .releaseKeys([]))
+        XCTAssertEqual(VoiceCommands.parse("hold"), .stopScrolling, "plain hold still stops scrolling")
+        XCTAssertEqual(VoiceCommands.parse("let's go"), .startSession)
+    }
+
+    func testNotKeys() {
+        XCTAssertNil(VoiceCommands.parse("t"))
+        XCTAssertNil(VoiceCommands.parse("hold the door"))
+        XCTAssertNil(VoiceCommands.parse("press the big red button"))
+        XCTAssertEqual(VoiceCommands.parse("down"), .action(.scrollDown, times: 1))
+        XCTAssertEqual(VoiceCommands.parse("page down"), .action(.scrollDown, times: 1))
+    }
+}

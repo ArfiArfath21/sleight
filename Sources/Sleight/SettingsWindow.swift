@@ -27,7 +27,7 @@ enum SettingsWindow {
 }
 
 enum SettingsTab: String, CaseIterable {
-    case general, gestures, voice, pointer, tuning, about
+    case general, gestures, voice, commands, pointer, tuning, about
 
     var title: String { rawValue.capitalized }
 
@@ -36,6 +36,7 @@ enum SettingsTab: String, CaseIterable {
         case .general: return "gearshape"
         case .gestures: return "hand.raised"
         case .voice: return "waveform"
+        case .commands: return "text.bubble"
         case .pointer: return "cursorarrow.motionlines"
         case .tuning: return "slider.horizontal.3"
         case .about: return "info.circle"
@@ -46,7 +47,8 @@ enum SettingsTab: String, CaseIterable {
         switch self {
         case .general: return 560
         case .gestures: return 640
-        case .voice: return 640
+        case .voice: return 560
+        case .commands: return 680
         case .pointer: return 560
         case .tuning: return 560
         case .about: return 380
@@ -64,6 +66,7 @@ struct SettingsTabView: View {
             case .general: GeneralSettings(store: store)
             case .gestures: GestureSettings(store: store)
             case .voice: VoiceSettings(store: store)
+            case .commands: VoiceCommandsList(word: store.config.wakeWord)
             case .pointer: PointerSettings(store: store)
             case .tuning: TuningSettings(store: store)
             case .about: AboutSettings()
@@ -183,18 +186,164 @@ private struct VoiceSettings: View {
                         help: "For \u{201C}type …\u{201D}: how long a silence means you've finished.")
             }
             .disabled(!store.config.voiceEnabled)
-            Section("What you can say") {
-                ForEach(GestureCatalog.voice(word), id: \.0) { say, does in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("\u{201C}\(say)\u{201D}")
-                        Text(does).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Text("Recognition runs on your Mac. Nothing you say is sent anywhere.")
+            Section {
+                Label("Recognition runs on your Mac. Nothing you say is sent anywhere.", systemImage: "lock")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: Voice commands
+
+/// Everything you can say, grouped, with a search box.
+private struct VoiceCommandsList: View {
+    let word: WakeWord
+    @State private var query = ""
+
+    var body: some View {
+        Form {
+            Section {
+                VoiceHero(word: word)
+                TextField("Search", text: $query, prompt: Text("Search, like \u{201C}tab\u{201D} or \u{201C}shift\u{201D}"))
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+            }
+            ForEach(groups) { group in
+                Section {
+                    ForEach(group.commands) { VoiceCommandRow(command: $0) }
+                } header: {
+                    Label(group.title, systemImage: group.symbol)
+                        .foregroundStyle(Color.sleightAmber)
+                }
+            }
+            if groups.isEmpty {
+                Section { Text("No command matches \u{201C}\(query)\u{201D}.").foregroundStyle(.secondary) }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var groups: [GestureCatalog.VoiceGroup] {
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !q.isEmpty else { return GestureCatalog.voiceGroups }
+        return GestureCatalog.voiceGroups.compactMap { g in
+            let hits = g.commands.filter { c in
+                g.title.lowercased().contains(q) || c.does.lowercased().contains(q)
+                    || c.say.contains { $0.lowercased().contains(q) }
+            }
+            return hits.isEmpty ? nil : GestureCatalog.VoiceGroup(title: g.title, symbol: g.symbol, commands: hits)
+        }
+    }
+}
+
+/// How a command is built: wake word, then the command. Shown once at the
+/// top so the rows below can be just the commands.
+private struct VoiceHero: View {
+    let word: WakeWord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "waveform").font(.title3).foregroundStyle(Color.sleightAmber)
+                Text("\(word.phrase.capitalized),").font(.title3.weight(.semibold))
+                PhraseChip(text: "next tab", prominent: true)
+            }
+            Text("Say the wake word, then any command below. Or press ⌃⌥V and just say the command, even with voice off.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// One command: what to say as chips, what it does underneath.
+private struct VoiceCommandRow: View {
+    let command: GestureCatalog.VoiceCommand
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            FlowLayout(spacing: 6) {
+                ForEach(command.say, id: \.self) { PhraseChip(text: $0) }
+            }
+            Text(command.does).font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+/// A phrase to say, set like a key cap in the brand's gold.
+private struct PhraseChip: View {
+    let text: String
+    var prominent = false
+
+    var body: some View {
+        Text(text)
+            .font(prominent ? .title3.weight(.semibold) : .callout.weight(.medium))
+            .padding(.horizontal, prominent ? 10 : 8)
+            .padding(.vertical, prominent ? 3 : 2)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.sleightAmber.opacity(prominent ? 0.18 : 0.10))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.sleightAmber.opacity(0.45), lineWidth: 1)
+            )
+    }
+}
+
+extension Color {
+    /// The brand gold, deepened in light mode so it reads on a pale background.
+    static let sleightAmber = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(cgColor: Brand.gold)!
+            : NSColor(srgbRed: 0.62, green: 0.40, blue: 0.02, alpha: 1)
+    })
+}
+
+/// Lays chips out left to right, wrapping onto new lines.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for i in row.items {
+                let size = subviews[i].sizeThatFits(.unspecified)
+                subviews[i].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = [Row()]
+        for i in subviews.indices {
+            let size = subviews[i].sizeThatFits(.unspecified)
+            if !rows[rows.count - 1].items.isEmpty, rows[rows.count - 1].width + spacing + size.width > width {
+                rows.append(Row())
+            }
+            var r = rows[rows.count - 1]
+            r.width += (r.items.isEmpty ? 0 : spacing) + size.width
+            r.height = max(r.height, size.height)
+            r.items.append(i)
+            rows[rows.count - 1] = r
+        }
+        return rows
     }
 }
 

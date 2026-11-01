@@ -11,6 +11,9 @@ final class EventInjector {
     private var leftDown = false
     private var rightDown = false
     private var commandHeld = false
+    /// Modifiers held by voice ("hold shift"). Every event we post carries them.
+    private(set) var held: [KeyModifier] = []
+    private var heldFlags: CGEventFlags { held.reduce(into: []) { $0.insert($1.flag) } }
     private var scrollRemainder = Vec2.zero
 
     init() {
@@ -53,14 +56,16 @@ final class EventInjector {
         let e = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: CGPoint(x: p.x, y: p.y),
                         mouseButton: b == .left ? .left : .right)
         e?.setIntegerValueField(.mouseEventClickState, value: Int64(clickCount))
+        if !held.isEmpty { e?.flags = heldFlags }   // "hold shift", then pinch = shift-click
         post(e)
     }
 
-    /// Release anything held (buttons, ⌘). Called on pause/quit so nothing sticks.
+    /// Release anything held (buttons, ⌘, voice-held keys). Called on pause/quit so nothing sticks.
     func releaseAll(at p: Vec2) {
         if leftDown { button(.left, down: false, at: p, clickCount: 1) }
         if rightDown { button(.right, down: false, at: p, clickCount: 1) }
         if commandHeld { setCommand(false) }
+        release([])
     }
 
     // MARK: Scroll
@@ -87,14 +92,41 @@ final class EventInjector {
 
     func keyDown(_ code: CGKeyCode, flags: CGEventFlags = []) {
         let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: true)
-        e?.flags = flags
+        e?.flags = flags.union(heldFlags)
         post(e)
     }
 
     func keyUp(_ code: CGKeyCode, flags: CGEventFlags = []) {
         let e = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)
-        e?.flags = flags
+        e?.flags = flags.union(heldFlags)
         post(e)
+    }
+
+    /// A named key with modifiers ("press command shift T"). false = unknown key.
+    @discardableResult
+    func press(_ k: KeyPress) -> Bool {
+        guard let code = KeyCode.named[k.key] else { return false }
+        var flags = k.modifiers.reduce(into: CGEventFlags()) { $0.insert($1.flag) }
+        if KeyCode.needsFn.contains(k.key) { flags.formUnion(Self.arrowFlags) }
+        if KeyCode.functionKeys.contains(code) { flags.insert(.maskSecondaryFn) }
+        key(code, flags: flags)
+        return true
+    }
+
+    /// Hold modifiers down until `release` ("hold shift").
+    func hold(_ mods: [KeyModifier]) {
+        for m in mods where !held.contains(m) {
+            modifier(m.code, flag: m.flag, down: true, otherFlags: heldFlags)
+            held.append(m)
+        }
+    }
+
+    /// Let go of these held modifiers; empty = all.
+    func release(_ mods: [KeyModifier]) {
+        for m in (mods.isEmpty ? held : mods) where held.contains(m) {
+            held.removeAll { $0 == m }
+            modifier(m.code, flag: m.flag, down: false, otherFlags: heldFlags)
+        }
     }
 
     /// Types text independent of the keyboard layout.
@@ -269,4 +301,49 @@ enum KeyCode {
     static let w: CGKeyCode = 13
     static let r: CGKeyCode = 15
     static let n: CGKeyCode = 45
+    static let function: CGKeyCode = 63
+
+    /// Key names from `SleightCore.Keys` → ANSI key codes.
+    static let named: [String: CGKeyCode] = {
+        var m: [String: CGKeyCode] = [
+            "return": 36, "escape": 53, "tab": 48, "space": 49, "delete": 51, "forwardDelete": 117,
+            "up": 126, "down": 125, "left": 123, "right": 124,
+            "home": 115, "end": 119, "pageUp": 116, "pageDown": 121,
+            "comma": 43, "period": 47, "slash": 44, "backslash": 42, "minus": 27, "equals": 24,
+            "semicolon": 41, "quote": 39, "grave": 50, "leftBracket": 33, "rightBracket": 30,
+            "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
+            "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17, "o": 31, "u": 32,
+            "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "n": 45, "m": 46,
+            "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26, "8": 28, "9": 25, "0": 29,
+        ]
+        let fkeys: [CGKeyCode] = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]
+        for (i, code) in fkeys.enumerated() { m["f\(i + 1)"] = code }
+        return m
+    }()
+
+    /// Keys that a real keyboard sends with the fn / keypad flags.
+    static let needsFn: Set<String> = ["up", "down", "left", "right", "home", "end", "pageUp", "pageDown", "forwardDelete"]
+    static let functionKeys: Set<CGKeyCode> = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]
+}
+
+extension KeyModifier {
+    var flag: CGEventFlags {
+        switch self {
+        case .control: return .maskControl
+        case .option: return .maskAlternate
+        case .shift: return .maskShift
+        case .command: return .maskCommand
+        case .function: return .maskSecondaryFn
+        }
+    }
+
+    var code: CGKeyCode {
+        switch self {
+        case .control: return KeyCode.control
+        case .option: return KeyCode.option
+        case .shift: return KeyCode.shift
+        case .command: return KeyCode.command
+        case .function: return KeyCode.function
+        }
+    }
 }

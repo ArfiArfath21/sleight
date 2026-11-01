@@ -48,6 +48,7 @@ yours**: every gesture has a menu of ready-made actions in **Settings**.
 | ✋ swipe up / down | Mission Control / Nothing |
 | 👌 tap · hold+slide ↕ · hold+slide ↔ | Nothing (pick media, tabs, zoom, arrow keys…) |
 | ✊ grab and slide sideways | App switcher |
+| ✊ flick up / down | Nothing |
 | 🖐🖐 part the curtains | Show desktop |
 | Frame with two L-shaped hands | Screenshot |
 | 👏👏 double clap (experimental) | Nothing |
@@ -149,7 +150,9 @@ say commands, one after another, with no wake word: "switch to Slack", "next tab
 | "Jarvis, export as PDF" · "new Finder window" | **Any menu command of the app in front**, by its name |
 | "Jarvis, scroll down" · "scroll right" · "go back" · "next tab" · "mission control" | Any action in the gesture list |
 | "Jarvis, keep scrolling" · "keep scrolling up" | **Continuous scrolling**, for reading. While it runs, just say "faster", "slower", "much faster", "up", "down" or "stop", with no wake word. Touching the trackpad or keyboard stops it too |
-| "Jarvis, undo" · "copy" · "paste" · "save" · "close tab" · "reload" · "press enter" | Everyday shortcuts and keys |
+| "Jarvis, undo" · "copy" · "paste" · "save" · "close tab" · "reload" | Everyday shortcuts |
+| "Jarvis, press enter" · "press page down" · "press F5" · "press command shift T" · "control C" | **Any key or combination**: arrows, home / end, page up / down, F1–F12, letters, digits, with command, shift, option, control or fn |
+| "Jarvis, hold shift" … "release" | **Holds a modifier** while you click or press other keys, until "release" or "let go" |
 | "Jarvis, next tab twice" · "undo 3 times" | Repeats |
 | "Jarvis, pause" · "next track" · "volume 30" · "mute" | Media and volume |
 | "Jarvis, open github.com" · "google best ramen" | Websites and web search |

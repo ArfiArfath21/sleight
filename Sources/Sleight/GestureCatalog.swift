@@ -54,6 +54,8 @@ enum GestureCatalog {
         GestureInfo(.okSlideVertical, ok, "Hold, slide up / down", "Make the OK sign and hold it still for a moment, then slide up or down. Each stretch of travel is one step. Let go to stop."),
         GestureInfo(.okSlideSideways, ok, "Hold, slide sideways", "Make the OK sign, hold it still for a moment, then slide left or right, one step per stretch of travel."),
         GestureInfo(.fistSlideSideways, fist, "Grab and slide", "Close your hand into a fist and pause for a beat, then slide it sideways: one step per stretch of travel. Open your hand to finish (for the app switcher, that picks the app)."),
+        GestureInfo(.fistFlickUp, fist, "Flick up", "Close your hand into a fist and snap it upward about a hand's length, quick, then bring it back slowly."),
+        GestureInfo(.fistFlickDown, fist, "Flick down", "Same fist, snapped downward. Start with the hand high: lowering a fist to rest is not a flick."),
         GestureInfo(reserved: .handsUp, both, "Both hands up, hold", "Raise both hands open, palms to the screen, about shoulder-width apart, as if saying \"hold on\". Keep them still for a second until the ring fills. While resting, Sleight keeps watching but only this wakes it."),
         GestureInfo(.curtains, both, "Part the curtains", "Bring both open hands together in front of you, palms to the screen, side by side and almost touching. When \"Part the curtains\" appears, sweep them apart sideways, fast."),
         GestureInfo(.frame, both, "Frame it", "Make an L with each hand: index finger up, thumb out sideways, other fingers folded. Hold the hands apart like framing a photo and keep still for half a second."),
@@ -62,25 +64,57 @@ enum GestureCatalog {
         GestureInfo(reserved: .fistHold, pointer, "Fist (in pointer mode)", "Close your hand into a fist and hold it for a moment."),
     ]
 
-    /// Voice commands, for the Guide and Settings: (what to say, what happens).
-    static func voice(_ w: WakeWord) -> [(String, String)] {
-        let p = w.phrase
-        return [
-            ("\(p), stay", "Conversation mode: then just say commands, no wake word, until \"done\""),
-            ("\(p), camera on / camera off", "Starts or stops the camera (and gestures)"),
-            ("\(p), switch to Claude", "Brings any app forward, opening it if needed"),
-            ("\(p), scroll down / scroll right / go back / next tab", "Any action in the gesture list, by name"),
-            ("\(p), keep scrolling", "Scrolls slowly until you say stop; then just \"faster\", \"slower\", \"up\", \"down\", \"stop\""),
-            ("\(p), export as PDF", "Any menu command of the app in front, by its name"),
-            ("\(p), next tab twice", "Add \"twice\" or \"3 times\" to repeat"),
-            ("\(p), pause / next track / volume up", "Media keys"),
-            ("\(p), type / say see you at six", "Types what you say into the text field you're in"),
-            ("\(p), search for flights to Goa", "Spotlight search"),
-            ("\(p), rest / wake up", "Rests gestures and voice; only \"wake up\" works while resting"),
-            ("\(p), pointer mode", "Pointer mode, without the gesture"),
-            ("⌃⌥V, then speak", "Push to talk: no wake word, works with voice off"),
-        ]
+    /// Voice commands, grouped, for Settings and the Guide. Each command lists
+    /// things to say (shown after the wake word) and what happens.
+    struct VoiceCommand: Identifiable {
+        var id: String { say.joined(separator: "|") }
+        let say: [String]
+        let does: String
     }
+
+    struct VoiceGroup: Identifiable {
+        var id: String { title }
+        let title: String
+        let symbol: String
+        let commands: [VoiceCommand]
+    }
+
+    static let voiceGroups: [VoiceGroup] = [
+        VoiceGroup(title: "Apps & menus", symbol: "macwindow", commands: [
+            VoiceCommand(say: ["switch to Claude", "open Finder"], does: "Brings any app forward, opening it if needed."),
+            VoiceCommand(say: ["export as PDF", "click show sidebar"], does: "Any menu command of the app in front, by its name."),
+            VoiceCommand(say: ["quit Safari"], does: "Quits an open app."),
+            VoiceCommand(say: ["run shortcut Morning"], does: "Runs one of your Apple Shortcuts."),
+        ]),
+        VoiceGroup(title: "Keys", symbol: "keyboard", commands: [
+            VoiceCommand(say: ["press enter", "press escape", "press tab"], does: "Presses that key."),
+            VoiceCommand(say: ["press page down", "press home", "press F5"], does: "Arrows, home, end, page up and down, F1–F12, delete, forward delete, any letter or digit."),
+            VoiceCommand(say: ["press command shift T", "control C"], does: "Shortcuts, with any of command, shift, option, control and fn. With a modifier, \u{201C}press\u{201D} is optional."),
+            VoiceCommand(say: ["hold shift", "release"], does: "Keeps a modifier down while you click or press other keys, until \u{201C}release\u{201D} or \u{201C}let go\u{201D}."),
+            VoiceCommand(say: ["press down 3 times"], does: "Add \u{201C}twice\u{201D} or \u{201C}3 times\u{201D} to repeat any key or action."),
+        ]),
+        VoiceGroup(title: "Typing", symbol: "character.cursor.ibeam", commands: [
+            VoiceCommand(say: ["type see you at six", "say on my way"], does: "Types what you say into the text field you're in, exactly as heard."),
+        ]),
+        VoiceGroup(title: "Scroll & browse", symbol: "scroll", commands: [
+            VoiceCommand(say: ["scroll down", "go back", "next tab"], does: "Any action in the gesture list, by name."),
+            VoiceCommand(say: ["keep scrolling"], does: "Scrolls slowly until you say stop. Meanwhile just \u{201C}faster\u{201D}, \u{201C}slower\u{201D}, \u{201C}up\u{201D}, \u{201C}down\u{201D} or \u{201C}stop\u{201D}, no wake word."),
+            VoiceCommand(say: ["open github.com", "google best ramen"], does: "A website, or a web search."),
+            VoiceCommand(say: ["search for flights to Goa"], does: "Spotlight search."),
+        ]),
+        VoiceGroup(title: "Media & system", symbol: "speaker.wave.2", commands: [
+            VoiceCommand(say: ["pause", "next track", "volume up"], does: "Media keys."),
+            VoiceCommand(say: ["volume 30"], does: "Sets the volume, 0 to 100."),
+            VoiceCommand(say: ["screenshot", "lock screen"], does: "Screenshots, Spotlight, lock screen and the rest of the gesture actions."),
+        ]),
+        VoiceGroup(title: "Sleight", symbol: "sparkles", commands: [
+            VoiceCommand(say: ["stay"], does: "Conversation mode: then just say commands, no wake word, until \u{201C}done\u{201D}."),
+            VoiceCommand(say: ["camera on", "camera off"], does: "Starts or stops the camera, and with it gestures."),
+            VoiceCommand(say: ["rest", "wake up"], does: "Rests gestures and voice. While resting only \u{201C}wake up\u{201D} works."),
+            VoiceCommand(say: ["pointer mode"], does: "Pointer mode, without the gesture."),
+            VoiceCommand(say: ["never mind"], does: "Closes the listening chip without doing anything."),
+        ]),
+    ]
 
     static var groups: [String] {
         var seen: [String] = []

@@ -337,6 +337,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if autoScrolling { stopAutoScroll(say: true) }
         case .startSession, .endSession:
             break   // the listener runs conversation mode; its chip says so
+        case .pressKey(let k, let times):
+            pipeline.output.queue.async { [injector = pipeline.injector] in
+                for i in 0..<times {
+                    injector.press(k)
+                    if i < times - 1 { usleep(30_000) }
+                }
+            }
+            say("keyboard", times > 1 ? "\(k.label) ×\(times)" : k.label)
+        case .holdKeys(let mods):
+            pipeline.output.queue.async { [injector = pipeline.injector] in injector.hold(mods) }
+            overlay.flash(Chip(symbol: "keyboard.badge.ellipsis", title: "Holding \(mods.map(\.symbol).joined())",
+                               detail: "say \u{201C}release\u{201D} to let go", accent: true), seconds: 2.4)
+        case .releaseKeys(let mods):
+            pipeline.output.queue.async { [injector = pipeline.injector] in injector.release(mods) }
+            say("keyboard", mods.isEmpty ? "Released keys" : "Released \(mods.map(\.symbol).joined())")
         }
     }
 

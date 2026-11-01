@@ -33,6 +33,12 @@ public enum VoiceIntent: Equatable, Sendable {
     case startSession, endSession
     /// "never mind": close the listening chip without doing anything.
     case cancel
+    /// A key or combination, `times` in a row ("press command shift T").
+    case pressKey(KeyPress, times: Int)
+    /// Modifiers held down until released ("hold shift" … "release").
+    case holdKeys([KeyModifier])
+    /// Let go of these modifiers; empty = all of them.
+    case releaseKeys([KeyModifier])
 }
 
 /// The word that gets Sleight's attention. Picked by measurement: synthetic
@@ -269,6 +275,11 @@ public enum VoiceCommands {
         guard !phrase.isEmpty else { return nil }
 
         if let v = volumeLevel(words) { return .setVolume(v) }
+        if let intent = fixed(phrase, times: times, nearMisses: false) { return intent }
+        // Keys drop filler only from the front: "you" is also the letter U.
+        var keyWords = stripped.filter { $0 != "please" }
+        while let w = keyWords.first, filler.contains(w) { keyWords.removeFirst() }
+        if let intent = Keys.command(keyWords, times: times) { return intent }
         if let intent = fixed(phrase, times: times) { return intent }
         if let name = argument(raw, verbs: shortcutVerbs, trimArticles: false) { return .runShortcut(original(name)) }
         if let app = argument(phrase, verbs: quitVerbs) { return .quit(app) }
@@ -283,10 +294,11 @@ public enum VoiceCommands {
     /// A built-in action or control phrase: exact first, then a near miss
     /// ("camera of", "scrawl down"), comparing without spaces so a word heard
     /// split or joined still counts.
-    static func fixed(_ phrase: String, times: Int?) -> VoiceIntent? {
+    static func fixed(_ phrase: String, times: Int?, nearMisses: Bool = true) -> VoiceIntent? {
         func act(_ a: ActionID) -> VoiceIntent { .action(a, times: times ?? defaultTimes(a)) }
         for (intent, forms) in controls where forms.contains(phrase) { return intent }
         for (a, forms) in phrases where forms.contains(phrase) { return act(a) }
+        guard nearMisses else { return nil }
         let squashed = phrase.replacingOccurrences(of: " ", with: "")
         guard squashed.count >= 6 else { return nil }
         var best: (VoiceIntent, Double)?

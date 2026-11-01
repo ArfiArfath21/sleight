@@ -56,10 +56,16 @@ struct GuideView: View {
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         Text("🎙  VOICE").font(.caption.weight(.semibold)).foregroundStyle(Color(cgColor: Brand.gold))
-                        ForEach(GestureCatalog.voice(wakeWord), id: \.0) { say, does in
+                        Text("Say \u{201C}\(wakeWord.phrase.capitalized), …\u{201D} then a command, or press ⌃⌥V and just say it.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        ForEach(GestureCatalog.voiceGroups) { group in
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("\u{201C}\(say)\u{201D}").font(.headline)
-                                Text(does).font(.callout).foregroundStyle(.secondary)
+                                Label(group.title, systemImage: group.symbol).font(.headline)
+                                ForEach(group.commands) { c in
+                                    Text(c.say.map { "\u{201C}\($0)\u{201D}" }.joined(separator: "  ·  ") + "  —  " + c.does)
+                                        .font(.callout).foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
                         }
                         Text("Turn voice on from the menu bar. Recognition runs on your Mac; nothing is sent anywhere.")
