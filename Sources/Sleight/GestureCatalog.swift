@@ -62,6 +62,19 @@ enum GestureCatalog {
         GestureInfo(reserved: .fistHold, pointer, "Fist (in pointer mode)", "Close your hand into a fist and hold it for a moment."),
     ]
 
+    /// Voice commands, for the Guide and Settings: (what to say, what happens).
+    static let voice: [(String, String)] = [
+        ("hey Sleight, switch to Claude", "Brings any app forward, opening it if needed"),
+        ("hey Sleight, scroll down / go back / next tab", "Any action in the gesture list, by name"),
+        ("hey Sleight, next tab twice", "Add \"twice\" or \"3 times\" to repeat"),
+        ("hey Sleight, pause / next track / volume up", "Media keys"),
+        ("hey Sleight, type see you at six", "Types the words into whatever has focus"),
+        ("hey Sleight, search for flights to Goa", "Spotlight search"),
+        ("hey Sleight, rest / wake up", "Rests gestures and voice; only \"wake up\" works while resting"),
+        ("hey Sleight, pointer mode", "Pointer mode, without the gesture"),
+        ("⌃⌥V, then speak", "Push to talk: no wake phrase, works with voice off"),
+    ]
+
     static var groups: [String] {
         var seen: [String] = []
         for g in all.map(\.group) where !seen.contains(g) { seen.append(g) }

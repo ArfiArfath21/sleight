@@ -26,6 +26,10 @@
     <true/>
     <key>NSCameraUsageDescription</key>
     <string>Sleight watches your hands through the camera to recognise gestures. Video never leaves your Mac.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Voice commands: Sleight listens for "hey Sleight" on your Mac. Audio never leaves your Mac.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Voice commands are recognised on your Mac, on-device, to turn "hey Sleight, …" into actions.</string>
     <key>NSCameraUseContinuityCameraDeviceType</key>
     <true/>
     <key>NSCameraReactionEffectGesturesEnabledDefault</key>

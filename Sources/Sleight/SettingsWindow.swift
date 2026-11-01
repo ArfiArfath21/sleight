@@ -35,6 +35,15 @@ struct SettingsView: View {
                     Button("Reset gestures to defaults") { store.config.gestures = GestureMap() }
                 }
             }
+            Section("Voice") {
+                Toggle("Listen for \u{201C}hey Sleight\u{201D}", isOn: $store.config.voiceEnabled)
+                Text("Keeps the microphone open (the orange dot stays on). Recognition runs on your Mac. ⌃⌥V speaks one command without the wake phrase, even with this off.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Tunable("Wait for the command", value: $store.config.voiceListenWindow, range: 2...10, format: "%.0f s",
+                        help: "After \u{201C}hey Sleight\u{201D} on its own.")
+                Tunable("Pause that ends a command", value: $store.config.voiceSettle, range: 0.3...1.5, format: "%.1f s",
+                        help: "Shorter is snappier; longer gives app names time to arrive.")
+            }
             Section("Sensitivity") {
                 Tunable("Swipe speed needed", value: $store.config.swipeMinSpeed, range: 2...10, format: "%.1f hand/s",
                         help: "Raise if swipes fire by accident; lower if they're hard to trigger.")

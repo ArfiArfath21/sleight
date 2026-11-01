@@ -18,6 +18,15 @@
 - **Two-hand rotate** (rotate images, scrub timelines).
 - **Snap-to-target** in pointer mode via the Accessibility API.
 
+## Voice
+
+- **SpeechAnalyzer** (macOS 26+) instead of `SFSpeechRecognizer`: newer on-device model,
+  likely better at the name and at short commands.
+- **Own wake-word model** so the recogniser only runs after "hey Sleight" (less power).
+- **Voice + hand:** point at something and say "click", "open this", "close that".
+- **Custom phrases** per action, and spoken custom shortcuts.
+- Skip listening while a call app (Zoom, Meet, FaceTime) has the mic.
+
 ## Speed
 
 - **Region-of-interest Vision** around the tracked hand.

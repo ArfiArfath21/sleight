@@ -1,0 +1,271 @@
+import AVFoundation
+import AppKit
+import Speech
+import SleightCore
+
+/// Listens through the microphone with on-device speech recognition and turns
+/// "hey Sleight, …" into intents. Nothing is sent off the Mac.
+///
+/// One recognition task runs at a time. It's thrown away and replaced after
+/// every command (so an old wake phrase can't fire twice), after a long stretch
+/// of unrelated talk, and after errors.
+final class VoiceListener {
+    enum State: Equatable {
+        case off
+        case waiting               // listening for "hey Sleight"
+        case listening(String)     // heard the wake phrase, here's the command so far
+        case unavailable(String)
+    }
+
+    var config = SleightConfig()
+    /// Resting: only "wake up" is acted on.
+    var resting = false
+    var onState: ((State) -> Void)?
+    var onIntent: ((VoiceIntent) -> Void)?
+    /// Something to tell the user briefly ("Didn't catch that").
+    var onMessage: ((String) -> Void)?
+    /// Extra words to help the recogniser (app names).
+    var vocabulary: () -> [String] = { [] }
+
+    private(set) var state: State = .off { didSet { if state != oldValue { onState?(state) } } }
+    private(set) var running = false
+
+    private let audio = AVAudioEngine()
+    private var recognizer: SFSpeechRecognizer?
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private let requestLock = NSLock()
+    private var task: SFSpeechRecognitionTask?
+    private var taskStarted = 0.0
+    private var generation = 0
+
+    /// Wake phrase heard (or push-to-talk) and waiting for the command until then.
+    private var armedUntil: Double?
+    private var pushToTalk = false
+    /// Started by push-to-talk alone: stop again after one command.
+    private var oneShot = false
+    private var command = ""
+    private var settle: DispatchWorkItem?
+    private var timeout: DispatchWorkItem?
+    private var failures = 0
+
+    // MARK: Start / stop
+
+    /// Starts listening (asking for permission the first time).
+    func start(oneShot: Bool = false, completion: ((Bool) -> Void)? = nil) {
+        if running { completion?(true); return }
+        Self.authorize { [weak self] error in
+            guard let self else { return }
+            if let error {
+                self.state = .unavailable(error)
+                completion?(false)
+                return
+            }
+            do {
+                try self.startAudio()
+                self.oneShot = oneShot
+                self.running = true
+                self.failures = 0
+                self.state = .waiting
+                self.newTask()
+                completion?(true)
+            } catch {
+                self.state = .unavailable("Microphone unavailable")
+                completion?(false)
+            }
+        }
+    }
+
+    func stop() {
+        guard running else { return }
+        running = false
+        oneShot = false
+        disarm()
+        endTask()
+        audio.inputNode.removeTap(onBus: 0)
+        audio.stop()
+        state = .off
+    }
+
+    /// Push-to-talk: listen for one command now, no wake phrase needed.
+    func listenNow() {
+        if !running {
+            start(oneShot: true) { [weak self] ok in if ok { self?.listenNow() } }
+            return
+        }
+        newTask()
+        pushToTalk = true
+        arm()
+    }
+
+    private static func authorize(_ done: @escaping (String?) -> Void) {
+        func main(_ e: String?) { DispatchQueue.main.async { done(e) } }
+        AVCaptureDevice.requestAccess(for: .audio) { micOK in
+            guard micOK else { return main("Microphone access is off (System Settings → Privacy → Microphone)") }
+            let denied = "Speech recognition is off (System Settings → Privacy → Speech Recognition)"
+            switch SFSpeechRecognizer.authorizationStatus() {
+            case .authorized: main(nil)
+            case .notDetermined:
+                SFSpeechRecognizer.requestAuthorization { status in main(status == .authorized ? nil : denied) }
+            default: main(denied)
+            }
+        }
+    }
+
+    private func startAudio() throws {
+        let r = SFSpeechRecognizer(locale: Locale.current) ?? SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+        guard let r, r.isAvailable else { throw NSError(domain: "Sleight", code: 1) }
+        recognizer = r
+        let input = audio.inputNode
+        let format = input.outputFormat(forBus: 0)
+        input.removeTap(onBus: 0)
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            guard let self else { return }
+            self.requestLock.lock()
+            self.request?.append(buffer)
+            self.requestLock.unlock()
+        }
+        audio.prepare()
+        try audio.start()
+    }
+
+    // MARK: Recognition tasks
+
+    private func newTask() {
+        endTask()
+        guard running, let recognizer else { return }
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
+        req.addsPunctuation = false
+        req.contextualStrings = ["hey Sleight", "Sleight"] + VoiceCommands.phrases.compactMap { $0.1.first }
+            + Array(vocabulary().prefix(80))
+        requestLock.lock(); request = req; requestLock.unlock()
+        generation += 1
+        let gen = generation
+        taskStarted = CACurrentMediaTime()
+        task = recognizer.recognitionTask(with: req) { [weak self] result, error in
+            DispatchQueue.main.async {
+                guard let self, gen == self.generation else { return }
+                if let result {
+                    self.failures = 0
+                    self.heard(result.bestTranscription.formattedString, final: result.isFinal)
+                }
+                if error != nil || result?.isFinal == true { self.restartSoon(after: error) }
+            }
+        }
+    }
+
+    private func endTask() {
+        generation += 1
+        requestLock.lock()
+        request?.endAudio()
+        request = nil
+        requestLock.unlock()
+        task?.cancel()
+        task = nil
+    }
+
+    private func restartSoon(after error: Error?) {
+        guard running else { return }
+        if error != nil { failures += 1 }
+        // Silence ends tasks with an error now and then; back off if it keeps failing.
+        let delay = error == nil ? 0 : min(0.2 * Double(failures), 3)
+        if failures > 20 { state = .unavailable("Speech recognition keeps failing"); stop(); return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.running else { return }
+            let keepArmed = self.armedUntil != nil
+            self.newTask()
+            if !keepArmed { self.disarm() }
+        }
+    }
+
+    // MARK: Transcript → command
+
+    private func heard(_ text: String, final: Bool) {
+        // `defaults write com.arfiarfath21.sleight voiceDebug -bool true` logs transcripts, for tuning.
+        if UserDefaults.standard.bool(forKey: "voiceDebug") {
+            NSLog("Sleight voice heard: \(text)\(final ? " (final)" : "")")
+        }
+        if armedUntil == nil {
+            guard let wake = VoiceCommands.wake(in: text) else {
+                // Unrelated talk: start fresh now and then so transcripts stay short.
+                if text.count > 240 || CACurrentMediaTime() - taskStarted > 50 { newTask() }
+                return
+            }
+            arm()
+            update(wake.command, final: final)
+        } else {
+            // After a restart the transcript no longer starts with the wake phrase.
+            update(VoiceCommands.wake(in: text)?.command ?? VoiceCommands.dropLeadingName(text), final: final)
+        }
+    }
+
+    private func arm() {
+        command = ""
+        state = .listening("")
+        keepListening(for: config.voiceListenWindow)
+    }
+
+    /// (Re)starts the wait for the command.
+    private func keepListening(for seconds: Double) {
+        armedUntil = CACurrentMediaTime() + seconds
+        timeout?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.timedOut() }
+        timeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
+    private func disarm() {
+        armedUntil = nil
+        pushToTalk = false
+        command = ""
+        settle?.cancel(); settle = nil
+        timeout?.cancel(); timeout = nil
+        if running, case .listening = state { state = .waiting }
+    }
+
+    private func update(_ text: String, final: Bool) {
+        // Still talking: don't time out mid-sentence.
+        if !text.isEmpty, text != command,
+           let until = armedUntil, until - CACurrentMediaTime() < config.voiceSettle + 1.5 {
+            keepListening(for: config.voiceSettle + 1.5)
+        }
+        command = text
+        state = .listening(text)
+        settle?.cancel()
+        guard VoiceCommands.parse(text) != nil else { return }
+        if final { commit(); return }
+        // Wait for the words to stop changing ("switch to" → "switch to Claude").
+        let work = DispatchWorkItem { [weak self] in self?.commit() }
+        settle = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + config.voiceSettle, execute: work)
+    }
+
+    private func commit() {
+        guard let intent = VoiceCommands.parse(command) else { return }
+        let wasOneShot = oneShot
+        disarm()
+        newTask()
+        state = .waiting
+        if resting, intent != .wake, intent != .cancel {
+            onMessage?("Resting · say \"hey Sleight, wake up\"")
+        } else {
+            onIntent?(intent)
+        }
+        if wasOneShot { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.stopIfOneShot() } }
+    }
+
+    private func timedOut() {
+        let said = command
+        disarm()
+        newTask()
+        state = .waiting
+        if !said.isEmpty { onMessage?("Didn't catch \"\(said)\"") }
+        if oneShot { stopIfOneShot() }
+    }
+
+    private func stopIfOneShot() {
+        guard oneShot, armedUntil == nil else { return }
+        stop()
+    }
+}

@@ -53,12 +53,23 @@ struct GuideView: View {
                             }
                         }
                     }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("🎙  VOICE").font(.caption.weight(.semibold)).foregroundStyle(Color(cgColor: Brand.gold))
+                        ForEach(GestureCatalog.voice, id: \.0) { say, does in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("\u{201C}\(say)\u{201D}").font(.headline)
+                                Text(does).font(.callout).foregroundStyle(.secondary)
+                            }
+                        }
+                        Text("Turn voice on from the menu bar. Recognition runs on your Mac; nothing is sent anywhere.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
                 }
             }
             Divider()
             Text("Change what any gesture does in Settings. Gestures set to Nothing aren't even looked for, so they never get in the way. Your hand has to be in the camera's view: chest to face height works best. Typing or touching the trackpad pauses everything for a second.")
                 .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text("⌃⌥S rest / wake · ⌃⌥P pointer mode · ⌃⌥K keyboard")
+            Text("⌃⌥S rest / wake · ⌃⌥P pointer mode · ⌃⌥K keyboard · ⌃⌥V speak")
                 .font(.footnote.monospaced()).foregroundStyle(.secondary)
         }
         .padding(28)

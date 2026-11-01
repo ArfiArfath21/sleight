@@ -7,6 +7,8 @@ import SleightBrand
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let store = ConfigStore()
     let pipeline = Pipeline()
+    let voice = VoiceListener()
+    private var voiceItem = NSMenuItem()
     private(set) var overlay: Overlay!
     private var statusItem: NSStatusItem!
     private var hotKeys: [HotKey] = []
@@ -47,7 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         store.onChange = { [weak self] cfg in
             self?.pipeline.apply(config: cfg)
             self?.overlay.gestures = cfg.gestures
+            self?.applyVoice(cfg)
         }
+        setupVoice()
         pipeline.output.onEvent = { [weak self] action in self?.handle(action) }
 
         modeBar.onKeyboard = { [weak self] in self?.keyboard.toggle() }
@@ -62,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             HotKey(id: 1, keyCode: kVK_ANSI_S, modifiers: controlKey | optionKey) { [weak self] in self?.toggleActive() },
             HotKey(id: 2, keyCode: kVK_ANSI_P, modifiers: controlKey | optionKey) { [weak self] in self?.togglePointer() },
             HotKey(id: 3, keyCode: kVK_ANSI_K, modifiers: controlKey | optionKey) { [weak self] in self?.toggleKeyboard() },
+            HotKey(id: 4, keyCode: kVK_ANSI_V, modifiers: controlKey | optionKey) { [weak self] in self?.voice.listenNow() },
         ]
 
         setupStatusItem()
@@ -98,6 +103,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         pipeline.stop()
+        voice.stop()
+    }
+
+    // MARK: Voice
+
+    private func setupVoice() {
+        voice.config = store.config
+        voice.vocabulary = { AppIndex.names() }
+        voice.onState = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .listening(let said):
+                self.overlay.voiceChip = Chip(symbol: "waveform", title: said.isEmpty ? "Listening…" : said,
+                                              detail: said.isEmpty ? "say a command" : nil, accent: true)
+            case .unavailable(let why):
+                self.overlay.voiceChip = nil
+                self.overlay.flash(Chip(symbol: "mic.slash", title: "Voice unavailable", detail: why, accent: true), seconds: 3)
+                if self.store.config.voiceEnabled { self.store.config.voiceEnabled = false }
+            case .off, .waiting:
+                self.overlay.voiceChip = nil
+            }
+            self.refreshMenu()
+        }
+        voice.onMessage = { [weak self] text in
+            self?.overlay.flash(Chip(symbol: "waveform", title: text, detail: nil, accent: true), seconds: 1.6)
+        }
+        voice.onIntent = { [weak self] intent in self?.perform(intent) }
+        if store.config.voiceEnabled { voice.start() }
+    }
+
+    private func applyVoice(_ cfg: SleightConfig) {
+        voice.config = cfg
+        if cfg.voiceEnabled, !voice.running {
+            voice.start()
+        } else if !cfg.voiceEnabled, voice.running {
+            voice.stop()
+        }
+        refreshMenu()
+    }
+
+    @objc func toggleVoice() {
+        store.config.voiceEnabled.toggle()
+        if store.config.voiceEnabled {
+            overlay.flash(Chip(symbol: "waveform", title: "Voice on", detail: "say \"hey Sleight, …\"", accent: true), seconds: 1.6)
+        }
+    }
+
+    @objc func speakNow() { voice.listenNow() }
+
+    private func perform(_ intent: VoiceIntent) {
+        NSLog("Sleight voice intent: \(intent)")
+        func say(_ symbol: String, _ title: String) {
+            overlay.flash(Chip(symbol: symbol, title: title, detail: nil, accent: true))
+        }
+        switch intent {
+        case .action(let a, let times):
+            let actions = (0..<times).flatMap { _ in ActionMapper.fire(a, speed: nil, config: store.config) }
+            pipeline.output.handle(actions, frameInterval: 0)
+            if ![.screenshot, .screenshotSelection, .screenshotTool].contains(a) {
+                say(GestureCatalog.symbol(a), times > 1 ? "\(a.title) ×\(times)" : a.title)
+            }
+        case .switchTo(let name):
+            if let app = AppIndex.find(name) {
+                AppIndex.open(app)
+                say("arrow.up.forward.app", app.name)
+            } else {
+                say("questionmark.app", "No app called \"\(name)\"")
+            }
+        case .type(let text):
+            pipeline.output.queue.async { [injector = pipeline.injector] in injector.type(text) }
+        case .search(let query):
+            pipeline.output.handle([.shortcut(.spotlight)], frameInterval: 0)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [injector = pipeline.injector, output = pipeline.output] in
+                output.queue.async { injector.type(query) }
+            }
+        case .rest:
+            pipeline.setActive(false)
+        case .wake:
+            if gesturesActive { say("sparkle", "Already awake") } else { pipeline.setActive(true) }
+        case .pointerMode:
+            if enabled { pipeline.setMode(.pointer) } else { say("video.slash", "Camera is off") }
+        case .gestureMode:
+            pipeline.setMode(.command)
+        case .cancel:
+            break
+        }
     }
 
     // MARK: Enable / modes
@@ -162,6 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             refreshMenu()
         case .activeChanged(let on):
             gesturesActive = on
+            voice.resting = !on
             updateMenuBarIcon()
             refreshMenu()
         case .mouseUp(.left, _, _):
@@ -224,6 +316,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         kb.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(kb)
 
+        voiceItem = item("Voice Commands", #selector(toggleVoice), "")
+        menu.addItem(voiceItem)
+        let talk = item("Speak a Command", #selector(speakNow), "v")
+        talk.keyEquivalentModifierMask = [.control, .option]
+        menu.addItem(talk)
+
         enableItem = item("Camera On", #selector(toggleEnabled), "")
         menu.addItem(enableItem)
         let cameraItem = NSMenuItem(title: "Camera", action: nil, keyEquivalent: "")
@@ -269,6 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshMenu() {
         enableItem.state = enabled ? .on : .off
+        voiceItem.state = store.config.voiceEnabled ? .on : .off
         activeItem.state = enabled && gesturesActive ? .on : .off
         pointerItem.state = mode == .pointer ? .on : .off
         statsItem.state = store.showStats ? .on : .off
@@ -278,8 +377,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusLine.title = "Camera off · ⌃⌥S to start"
             qualityLine.title = "Camera is off"
         } else {
-            statusLine.title = !gesturesActive ? "Resting · 👏👏 or ⌃⌥S to wake"
-                : (mode == .pointer ? "Pointer mode · ✊ to exit" : "Active · 👏👏 to rest")
+            statusLine.title = !gesturesActive ? "Resting · both hands up or ⌃⌥S to wake"
+                : (mode == .pointer ? "Pointer mode · ✊ to exit" : "Active · both hands up to rest")
             let light = q.luma < 40 ? "dark" : (q.luma < 70 ? "dim" : "good")
             qualityLine.title = String(format: "%.0f fps · %.0f ms pipeline (p95 %.0f) · light %@",
                                        q.fps, q.latencyMs, q.latencyP95Ms, light)

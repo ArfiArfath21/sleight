@@ -1,7 +1,7 @@
 <p align="center"><img src="docs/images/wordmark.png" width="460" alt="Sleight"></p>
 
 <p align="center"><b>Gestures that land.</b><br>
-Camera hand gestures for macOS: a handful of easy gestures, both hands, no aiming.</p>
+Camera hand gestures and voice commands for macOS: a handful of easy gestures, both hands, no aiming.</p>
 
 <p align="center">
   <a href="https://github.com/ArfiArfath21/sleight/releases/latest"><img src="https://img.shields.io/github/v/release/ArfiArfath21/sleight?color=f7f2e6&labelColor=08080d" alt="Latest release"></a>
@@ -26,9 +26,11 @@ desktop, take a screenshot, and anything else you assign. Gestures depend on **w
 can raise a hand anywhere in view and flick. When you do need to aim, point and hold to
 get a cursor, then make a fist to put it away.
 
+For things a gesture can't name, say it: **"hey Sleight, switch to Claude"**.
+
 It is a native Swift menu bar app. Apple's Vision hand-pose model runs on the Neural
-Engine (~8 ms per frame), events go straight to the window server, and no frame ever
-leaves the Mac.
+Engine (~8 ms per frame), speech is recognised on-device, events go straight to the
+window server, and no frame or sound ever leaves the Mac.
 
 ## Gestures: Sleight recognises, you decide
 
@@ -126,6 +128,33 @@ highlight on hover.
 | `⌃⌥S` | Rest / wake (camera keeps watching) |
 | `⌃⌥P` | Pointer mode on / off |
 | `⌃⌥K` | On-screen keyboard |
+| `⌃⌥V` | Speak one command (push to talk) |
+
+## Voice commands
+
+Hands are best for quick, continuous things (scrolling, flicking, sliding). Voice is
+best for things with a name. Turn on **Voice Commands** in the menu bar, then:
+
+| Say | Does |
+|---|---|
+| "hey Sleight, switch to Claude" | Brings any app forward, opening it if needed ("open Safari", "go to Slack") |
+| "hey Sleight, scroll down" · "go back" · "next tab" · "mission control" | Any action in the gesture list, by name |
+| "hey Sleight, next tab twice" · "scroll down 3 times" | Repeats |
+| "hey Sleight, pause" · "next track" · "volume up" · "mute" | Media keys |
+| "hey Sleight, type see you at six" | Types into whatever has focus |
+| "hey Sleight, search for flights to Goa" | Spotlight |
+| "hey Sleight, rest" · "wake up" | Rests gestures and voice; while resting only "wake up" works |
+| "hey Sleight, pointer mode" | Pointer mode without the gesture |
+
+You can also say "hey Sleight", pause, then the command. A chip shows what it heard as
+you speak. `⌃⌥V` takes one command without the wake phrase, even with voice off.
+
+- **On-device:** Apple's speech recogniser in on-device mode. Nothing is sent anywhere.
+- **The name:** recognisers rarely spell "Sleight" right ("slight", "slide", "sleigh",
+  "Heli"), so close forms count. Weak ones only count when a real command follows, so
+  "we had a slight problem" does nothing.
+- **The mic stays open** while voice is on (the orange dot shows). Use push to talk if
+  you'd rather it didn't.
 
 ## Install
 
@@ -206,6 +235,7 @@ term.
 | **Accidental media** | OK sign required, closed from open fingers, held still before sliding. |
 | **Flicks near the bottom of the frame** | A flick that starts in view is followed even when it carries the hand into the ignored keyboard zone. |
 | **Wrist-snap flicks** | Flicks are measured between the palm and the fingertips, so a snap of the wrist counts. |
+| **Voice firing on conversation** | Needs "hey Sleight" before a command it knows; unknown sentences are dropped, and the name alone in a sentence never wakes it. |
 | **HUD in your screenshot** | Sleight's own overlay is excluded from screen capture and sharing. |
 | **Ghost hands** in dark rooms | Low-confidence detections are rejected (a real dark-room recording is a regression test). |
 | **Background people** | Tiny hands are ignored; the hand doing a gesture keeps it even if another appears. |
@@ -223,15 +253,17 @@ Sources/
     HandTracks          up to two hands across frames: filtering, debounced shape and pinch
     Flick               deliberate-flick detector (settle, dominance, return-stroke lockout)
     Mapping             gesture slots, the action list, defaults, action → OS events
+    Voice               wake phrase, spoken commands → intents, app-name matching
     CommandEngine       one-hand recognisers (skips gestures set to Nothing)
     TwoHandGestures     hands up (rest/wake), curtains, frame, double clap
     PointerEngine       pointer mode
     SleightEngine       active/resting, mode switching, real-input override
   Sleight/            the app: camera, Vision, output (glide, momentum, media keys, ⌘-Tab),
-                      input monitor, overlay chip + ring + intro, mode bar, keyboard,
+                      input monitor, voice listener (on-device speech), app index,
+                      overlay chip + ring + intro, mode bar, keyboard,
                       menu bar, settings, guide, preview & tuning
   SleightBrand/       the logo, drawn in code
-Tests/SleightCoreTests  85 tests, including a real dark-room replay
+Tests/SleightCoreTests  92 tests, including a real dark-room replay
 ```
 
 ## The name and the mark

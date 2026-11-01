@@ -18,6 +18,9 @@ final class Overlay {
     var gestures = GestureMap()
     var enabled = true { didSet { if !enabled { windows.forEach { $0.view.hideAll() } } } }
     private var flash: (chip: Chip, until: Double)?
+    /// Voice: "Listening…" while a spoken command is coming in.
+    var voiceChip: Chip?
+    private var drewWhileOff = false
 
     init(shared: SharedState) {
         self.shared = shared
@@ -51,14 +54,29 @@ final class Overlay {
     func playIntro() { activeWindow?.view.playIntro() }
 
     @objc private func frame() {
-        guard enabled else { return }
-        let hud = shared.hud
         let now = CACurrentMediaTime()
         if let f = flash, now > f.until { flash = nil }
+        // Camera off: only voice feedback, then clear it once.
+        guard enabled else {
+            if let chip = flash?.chip ?? voiceChip {
+                drewWhileOff = true
+                let active = activeWindow
+                for w in windows {
+                    w.view.update(ring: nil, at: .zero, chip: w === active ? chip : nil, flashing: flash != nil, stats: nil)
+                }
+            } else if drewWhileOff {
+                drewWhileOff = false
+                windows.forEach { $0.view.hideAll() }
+            }
+            return
+        }
+        let hud = shared.hud
 
         var chip: Chip?
         if let f = flash {
             chip = f.chip
+        } else if let v = voiceChip {
+            chip = v
         } else if !hud.active {
             // Resting: say so only while a hand is up (or the wake gesture is forming).
             if let cue = hud.cue, cue == .clap || cue == .handsUp {
