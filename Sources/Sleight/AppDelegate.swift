@@ -220,7 +220,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 say("questionmark.app", "No app called \"\(name)\"")
             }
         case .type(let text):
+            // Only into a text field: typed keys anywhere else become shortcuts.
+            guard Self.focusedElementIsText() else {
+                overlay.flash(Chip(symbol: "character.cursor.ibeam", title: "No text field selected",
+                                   detail: "click into one, then say it again", accent: true), seconds: 2)
+                return
+            }
             pipeline.output.queue.async { [injector = pipeline.injector] in injector.type(text) }
+            let preview = text.count > 40 ? String(text.prefix(40)) + "…" : text
+            say("character.cursor.ibeam", preview)
         case .search(let query):
             pipeline.output.handle([.shortcut(.spotlight)], frameInterval: 0)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [injector = pipeline.injector, output = pipeline.output] in

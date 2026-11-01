@@ -150,7 +150,7 @@ turn it off and close the mic.
 | "Jarvis, open github.com" · "google best ramen" | Websites and web search |
 | "Jarvis, search for invoices" | Spotlight |
 | "Jarvis, run Morning Routine" | Any of your Apple Shortcuts, which makes the list open-ended |
-| "Jarvis, type see you at six" | Types into whatever has focus |
+| "Jarvis, type see you at six, and bring the tickets." | Dictation into the text field you're in, with punctuation; keeps going through short pauses and ends after a longer one |
 | "Jarvis, rest" · "wake up" | Rests gestures and voice; while resting only "wake up" works |
 
 You can also say "Jarvis", pause, then the command. A chip shows what it heard as you

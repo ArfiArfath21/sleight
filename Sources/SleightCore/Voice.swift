@@ -82,14 +82,24 @@ public enum VoiceCommands {
         return out.split(separator: " ").joined(separator: " ")
     }
 
-    /// Finds the last wake phrase in `transcript` and returns what follows it
-    /// (possibly empty), or nil when there's none.
+    /// The transcript as spoken words: each keeps its original text (capitals,
+    /// punctuation) for dictation, plus a bare lowercase key for matching.
+    static func tokens(_ s: String) -> [(text: String, key: String)] {
+        s.split(whereSeparator: \.isWhitespace).map { (String($0), normalize(String($0))) }
+            .filter { !$0.1.isEmpty || $0.0.contains(where: { $0.isLetter || $0.isNumber }) }
+    }
+
+    static func join(_ t: ArraySlice<(text: String, key: String)>) -> String {
+        t.map(\.text).joined(separator: " ")
+    }
+
+    /// Finds the last wake phrase in `transcript` and returns what follows it,
+    /// as spoken (possibly empty), or nil when there's none.
     public static func afterWakePhrase(_ transcript: String, word: WakeWord = .jarvis) -> String? {
-        let words = normalize(transcript, keepCase: true).split(separator: " ").map(String.init)
-        let lower = words.map { $0.lowercased() }
-        for i in stride(from: words.count - 1, through: 0, by: -1) where word.forms.contains(lower[i]) {
-            if word.needsGreeting, i == 0 || !greetings.contains(lower[i - 1]) { continue }
-            return dropLeadingName(words[(i + 1)...].joined(separator: " "), word: word)
+        let t = tokens(transcript)
+        for i in stride(from: t.count - 1, through: 0, by: -1) where word.forms.contains(t[i].key) {
+            if word.needsGreeting, i == 0 || !greetings.contains(t[i - 1].key) { continue }
+            return dropLeadingName(join(t[(i + 1)...]), word: word)
         }
         return nil
     }
@@ -108,32 +118,32 @@ public enum VoiceCommands {
             // so far (a pause before the command) or be followed by a command.
             if word.needsGreeting || c.isEmpty || parse(c) != nil { return Wake(command: c, strong: true) }
         }
-        let words = normalize(transcript, keepCase: true).split(separator: " ").map(String.init)
-        let lower = words.map { $0.lowercased() }
+        let t = tokens(transcript)
         func weak(from i: Int) -> Wake? {
-            let c = dropLeadingName(words[i...].joined(separator: " "), word: word)
+            guard i <= t.count else { return nil }
+            let c = dropLeadingName(join(t[i...]), word: word)
             return parse(c) != nil ? Wake(command: c, strong: false) : nil
         }
         guard word.needsGreeting else { return nil }
-        for i in stride(from: words.count - 1, through: 0, by: -1) {
-            if word.merged.contains(lower[i]), let w = weak(from: i + 1) { return w }
-            if i + 1 < words.count, weakGreetings.contains(lower[i]), word.forms.contains(lower[i + 1]),
+        for i in stride(from: t.count - 1, through: 0, by: -1) {
+            if word.merged.contains(t[i].key), let w = weak(from: i + 1) { return w }
+            if i + 1 < t.count, weakGreetings.contains(t[i].key), word.forms.contains(t[i + 1].key),
                let w = weak(from: i + 2) { return w }
         }
-        if let first = lower.first, word.forms.contains(first), let w = weak(from: 1) { return w }
+        if let first = t.first?.key, word.forms.contains(first), let w = weak(from: 1) { return w }
         return nil
     }
 
     /// Recognisers revise as they go ("hey slide" → "slide slide scroll down"):
     /// drop greeting and name words from the start of a command.
     public static func dropLeadingName(_ command: String, word: WakeWord = .jarvis) -> String {
-        var words = normalize(command, keepCase: true).split(separator: " ").map(String.init)
-        while let first = words.first?.lowercased(),
+        var t = tokens(command)[...]
+        while let first = t.first?.key,
               word.forms.contains(first) || greetings.contains(first) || weakGreetings.contains(first)
                 || word.merged.contains(first) {
-            words.removeFirst()
+            t = t.dropFirst()
         }
-        return words.joined(separator: " ")
+        return join(t)
     }
 
     // MARK: Commands
@@ -207,7 +217,7 @@ public enum VoiceCommands {
     /// Words that add nothing ("please scroll down").
     static let filler: Set<String> = ["please", "can", "you", "could", "would", "just", "now", "the", "sleight"]
     static let switchVerbs = ["switch to", "go to", "open", "launch", "show me", "bring up", "start", "focus"]
-    static let typeVerbs = ["type", "write", "dictate"]
+    static let typeVerbs: Set<String> = ["type", "write", "dictate", "insert"]
     static let webVerbs = ["google", "search the web for", "search google for", "search online for", "web search",
                            "search the internet for", "look up online"]
     static let searchVerbs = ["search for", "search", "look up", "find"]
@@ -226,7 +236,7 @@ public enum VoiceCommands {
         func original(_ tail: String) -> String {
             cased.suffix(tail.split(separator: " ").count).joined(separator: " ")
         }
-        if let text = argument(raw, verbs: typeVerbs, trimArticles: false) { return .type(original(text)) }
+        if let text = dictation(command) { return .type(text) }
         if let q = argument(raw, verbs: webVerbs, trimArticles: false) { return .webSearch(original(q)) }
         if let q = argument(raw, verbs: searchVerbs, trimArticles: false) { return .search(original(q)) }
 
@@ -269,6 +279,22 @@ public enum VoiceCommands {
         for (intent, forms) in controls { consider(intent, forms) }
         for (a, forms) in phrases { consider(act(a), forms) }
         return best?.0
+    }
+
+    /// "type Hello, see you at six." → "Hello, see you at six." exactly as heard.
+    /// nil when it isn't a type command or nothing follows the verb yet.
+    public static func dictation(_ command: String) -> String? {
+        let t = tokens(command)
+        guard let first = t.first, typeVerbs.contains(first.key), t.count > 1 else { return nil }
+        var text = join(t.dropFirst())
+        // The recogniser sometimes puts a comma or colon after the verb.
+        while let c = text.first, ",:;.-".contains(c) { text.removeFirst(); text = text.trimmingCharacters(in: .whitespaces) }
+        return text.isEmpty ? nil : text
+    }
+
+    /// "type …", including "type" on its own with the words still to come.
+    public static func startsDictation(_ command: String) -> Bool {
+        tokens(command).first.map { typeVerbs.contains($0.key) } ?? false
     }
 
     /// "volume 30", "set volume to 50 percent", "volume to max".

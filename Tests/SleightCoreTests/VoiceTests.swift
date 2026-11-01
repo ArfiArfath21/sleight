@@ -3,7 +3,7 @@ import XCTest
 
 final class VoiceTests: XCTestCase {
     func testWakePhraseAndMisspellings() {
-        XCTAssertEqual(VoiceCommands.afterWakePhrase("Hey Sleight, scroll down.", word: .sleight), "scroll down")
+        XCTAssertEqual(VoiceCommands.afterWakePhrase("Hey Sleight, scroll down.", word: .sleight), "scroll down.")
         XCTAssertEqual(VoiceCommands.afterWakePhrase("hey slight switch to Claude", word: .sleight), "switch to Claude")
         XCTAssertEqual(VoiceCommands.afterWakePhrase("OK, sleigh. Pause", word: .sleight), "Pause")
         XCTAssertEqual(VoiceCommands.afterWakePhrase("hey slate", word: .sleight), "")
@@ -113,6 +113,12 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(VoiceCommands.parse("switch to Claude"), .switchTo("claude"))
         XCTAssertEqual(VoiceCommands.parse("open the Safari app"), .switchTo("safari"))
         XCTAssertEqual(VoiceCommands.parse("type Hello there"), .type("Hello there"))
+        XCTAssertEqual(VoiceCommands.parse("Type: Hello, see you at 6. Thanks!"), .type("Hello, see you at 6. Thanks!"))
+        XCTAssertEqual(VoiceCommands.afterWakePhrase("Jarvis, type Don't forget the milk."), "type Don't forget the milk.")
+        XCTAssertEqual(VoiceCommands.parse("insert my email"), .type("my email"))
+        XCTAssertNil(VoiceCommands.parse("type"), "wait for the words")
+        XCTAssertTrue(VoiceCommands.startsDictation("Type."))
+        XCTAssertEqual(VoiceCommands.parse("Type. Meet me at six."), .type("Meet me at six."), "words after a pause")
         XCTAssertEqual(VoiceCommands.parse("search for flights to Goa"), .search("flights to Goa"))
         XCTAssertNil(VoiceCommands.parse("switch to"), "wait for the app name")
         XCTAssertNil(VoiceCommands.parse("what's the weather like"))

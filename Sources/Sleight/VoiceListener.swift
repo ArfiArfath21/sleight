@@ -49,6 +49,10 @@ final class VoiceListener {
     /// Started by push-to-talk alone: stop again after one command.
     private var oneShot = false
     private var command = ""
+    /// Dictation ("type …") can run over several recogniser segments: the
+    /// recogniser starts afresh after a pause, so earlier segments are kept here.
+    private var dictationBase = ""
+    private var segment = ""
     private var settle: DispatchWorkItem?
     private var timeout: DispatchWorkItem?
     private var failures = 0
@@ -149,7 +153,8 @@ final class VoiceListener {
         let req = SFSpeechAudioBufferRecognitionRequest()
         req.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition { req.requiresOnDeviceRecognition = true }
-        req.addsPunctuation = false
+        // Punctuation and capitals for dictation; commands ignore them.
+        req.addsPunctuation = true
         // Bias the recogniser towards what makes sense right now: the wake word,
         // commands, app names, and the menu commands of the app in front.
         req.contextualStrings = [config.wakeWord.title, config.wakeWord.phrase]
@@ -212,9 +217,24 @@ final class VoiceListener {
             update(wake.command, final: final)
         } else {
             // After a restart the transcript no longer starts with the wake phrase.
-            update(VoiceCommands.wake(in: text, word: config.wakeWord)?.command
-                   ?? VoiceCommands.dropLeadingName(text, word: config.wakeWord), final: final)
+            let t = VoiceCommands.wake(in: text, word: config.wakeWord)?.command
+                ?? VoiceCommands.dropLeadingName(text, word: config.wakeWord)
+            if isDictating, isNewSegment(t) {
+                dictationBase = command
+            }
+            segment = t
+            update(dictationBase.isEmpty ? t : dictationBase + " " + t, final: final)
         }
+    }
+
+    private var isDictating: Bool { VoiceCommands.startsDictation(command) }
+
+    /// The recogniser dropped what it had and began again (after a pause), as
+    /// opposed to revising its guess, which keeps the start and the length.
+    private func isNewSegment(_ t: String) -> Bool {
+        guard !segment.isEmpty, !t.isEmpty else { return false }
+        let first = { (s: String) in VoiceCommands.normalize(s).split(separator: " ").first.map(String.init) ?? "" }
+        return first(t) != first(segment) && t.count < segment.count / 2 + 4
     }
 
     private func arm() {
@@ -236,26 +256,32 @@ final class VoiceListener {
         armedUntil = nil
         pushToTalk = false
         command = ""
+        dictationBase = ""
+        segment = ""
         settle?.cancel(); settle = nil
         timeout?.cancel(); timeout = nil
         if running, case .listening = state { state = .waiting }
     }
 
     private func update(_ text: String, final: Bool) {
-        // Still talking: don't time out mid-sentence.
-        if !text.isEmpty, text != command,
-           let until = armedUntil, until - CACurrentMediaTime() < config.voiceSettle + 1.5 {
-            keepListening(for: config.voiceSettle + 1.5)
-        }
         command = text
+        let intent = parse(text)
+        let dictating = VoiceCommands.startsDictation(text)
+        // Dictation waits for a longer silence: people pause mid-sentence.
+        let pause = dictating ? max(config.voiceDictationPause, config.voiceSettle) : config.voiceSettle
+        // Still talking: don't time out mid-sentence.
+        if !text.isEmpty, let until = armedUntil, until - CACurrentMediaTime() < pause + 1.5 {
+            keepListening(for: pause + 1.5)
+        }
         state = .listening(text)
         settle?.cancel()
-        guard parse(text) != nil else { return }
-        if final { commit(); return }
+        guard intent != nil else { return }
+        // A final result ends a command, but not dictation: more may follow the pause.
+        if final, !dictating { commit(); return }
         // Wait for the words to stop changing ("switch to" → "switch to Claude").
         let work = DispatchWorkItem { [weak self] in self?.commit() }
         settle = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + config.voiceSettle, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + pause, execute: work)
     }
 
     private func commit() {

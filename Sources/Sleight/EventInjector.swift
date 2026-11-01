@@ -98,15 +98,28 @@ final class EventInjector {
     }
 
     /// Types text independent of the keyboard layout.
+    /// Types text as key events. macOS takes at most 20 UTF-16 units per event
+    /// (longer strings are cut off), so it goes in chunks that never split a character.
     func type(_ text: String) {
-        let units = Array(text.utf16)
-        for down in [true, false] {
-            let e = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
-            units.withUnsafeBufferPointer { buf in
-                e?.keyboardSetUnicodeString(stringLength: buf.count, unicodeString: buf.baseAddress)
+        var chunk: [UInt16] = []
+        func flush() {
+            guard !chunk.isEmpty else { return }
+            for down in [true, false] {
+                let e = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
+                chunk.withUnsafeBufferPointer { buf in
+                    e?.keyboardSetUnicodeString(stringLength: buf.count, unicodeString: buf.baseAddress)
+                }
+                post(e)
             }
-            post(e)
+            chunk.removeAll()
+            usleep(2_000)
         }
+        for ch in text {
+            let units = Array(String(ch).utf16)
+            if chunk.count + units.count > 20 { flush() }
+            chunk += units
+        }
+        flush()
     }
 
     /// Press or release a modifier key on its own (flagsChanged).

@@ -167,6 +167,8 @@ public struct SleightConfig: Codable, Equatable, Sendable {
     public var voiceListenWindow: Double = 5
     /// A command is taken once the words stop changing for this long.
     public var voiceSettle: Double = 0.7
+    /// "type …" ends after this much silence (people pause mid-sentence).
+    public var voiceDictationPause: Double = 1.6
     /// Start the camera at launch. Off: say "Jarvis, camera on" (or ⌃⌥S).
     public var cameraAtLaunch: Bool = false
     /// Turn the camera off after this many minutes without a hand in view
