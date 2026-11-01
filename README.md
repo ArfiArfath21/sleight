@@ -134,9 +134,13 @@ highlight on hover.
 ## Voice commands
 
 Hands are best for quick, continuous things (scrolling, flicking, sliding). Voice is
-best for things with a name. **Double-tap ⌥ Option** to turn voice on (it listens for a
-command straight away), then say **Jarvis, …** whenever you like. Double-tap again to
-turn it off and close the mic.
+best for things with a name. **Double-tap ⌥ Option** to turn voice on, then say
+**Jarvis, …** whenever you like. Double-tap again to turn it off and close the mic.
+
+**Conversation mode:** turning voice on starts it, and so does "Jarvis, stay". Then just
+say commands, one after another, with no wake word: "switch to Slack", "next tab",
+"scroll down", "type on my way". Talk that isn't a command is ignored. "Done" (or
+"that's all", "thanks") ends it, and so do two quiet minutes.
 
 | Say | Does |
 |---|---|

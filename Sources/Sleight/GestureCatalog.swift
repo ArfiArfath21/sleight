@@ -66,6 +66,7 @@ enum GestureCatalog {
     static func voice(_ w: WakeWord) -> [(String, String)] {
         let p = w.phrase
         return [
+            ("\(p), stay", "Conversation mode: then just say commands, no wake word, until \"done\""),
             ("\(p), camera on / camera off", "Starts or stops the camera (and gestures)"),
             ("\(p), switch to Claude", "Brings any app forward, opening it if needed"),
             ("\(p), scroll down / scroll right / go back / next tab", "Any action in the gesture list, by name"),

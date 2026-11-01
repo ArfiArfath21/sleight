@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var scrollingUp = false
     private var autoScrolling = false
     private var scrollChip: Chip?
+    private var sessionChip: Chip?
     private var lastHandSeen = CACurrentMediaTime()
     private var voiceItem = NSMenuItem()
     private(set) var overlay: Overlay!
@@ -146,7 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.overlay.voiceChip = nil
                 self.overlay.flash(Chip(symbol: "mic.slash", title: "Voice unavailable", detail: why, accent: true), seconds: 3)
             case .off, .waiting:
-                self.overlay.voiceChip = self.scrollChip
+                self.overlay.voiceChip = self.scrollChip ?? self.sessionChip
             }
             self.refreshMenu()
         }
@@ -155,6 +156,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         voice.onIntent = { [weak self] intent in self?.perform(intent) }
         pipeline.output.onAutoScrollInterrupted = { [weak self] in self?.stopAutoScroll(say: false) }
+        voice.onSession = { [weak self] on in
+            guard let self else { return }
+            self.sessionChip = on
+                ? Chip(symbol: "waveform", title: "Listening for commands",
+                       detail: "no need to say \(self.store.config.wakeWord.title) · \u{201C}done\u{201D} to finish", accent: true)
+                : nil
+            if !on { self.overlay.flash(Chip(symbol: "waveform", title: "Conversation over",
+                                             detail: "say \u{201C}\(self.store.config.wakeWord.title), stay\u{201D} to start again", accent: true), seconds: 1.6) }
+            if case .listening = self.voice.state {} else { self.overlay.voiceChip = self.scrollChip ?? self.sessionChip }
+        }
         pipeline.inputMonitor.onDoubleTap = { [weak self] in self?.toggleVoice() }
         applyVoice(store.config)
     }
@@ -331,6 +342,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if autoScrolling { stopAutoScroll(say: true) }
         case .cancel:
             if autoScrolling { stopAutoScroll(say: true) }
+        case .startSession, .endSession:
+            break   // the listener runs conversation mode; its chip says so
         }
     }
 

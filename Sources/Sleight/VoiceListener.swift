@@ -33,6 +33,11 @@ final class VoiceListener {
     private(set) var running = false
     /// Continuous scrolling is running: "faster", "slower", "stop" work alone.
     var scrolling = false
+    /// Conversation mode: every command works without the wake word, until
+    /// "done" or a quiet spell. Sentences that aren't commands are ignored.
+    private(set) var inSession = false
+    var onSession: ((Bool) -> Void)?
+    private var sessionTimer: DispatchWorkItem?
     /// Listen for a command straight away once started (voice just turned on).
     var listenOnStart = false
     private var starting = false
@@ -82,9 +87,9 @@ final class VoiceListener {
                 self.state = .waiting
                 self.newTask()
                 if self.listenOnStart {
+                    // Turned on to talk: conversation mode, ready right away.
                     self.listenOnStart = false
-                    self.pushToTalk = true
-                    self.arm()
+                    self.startSession()
                 }
                 completion?(true)
             } catch {
@@ -98,6 +103,7 @@ final class VoiceListener {
         guard running else { return }
         running = false
         oneShot = false
+        endSession()
         disarm()
         endTask()
         audio.inputNode.removeTap(onBus: 0)
@@ -216,6 +222,20 @@ final class VoiceListener {
             onIntent?(control)
             return
         }
+        if armedUntil == nil, inSession {
+            // No wake word needed. Only something that is (or is becoming) a
+            // command opens the chip; other talk is dropped quietly.
+            let t = VoiceCommands.wake(in: text, word: config.wakeWord)?.command
+                ?? VoiceCommands.dropLeadingName(text, word: config.wakeWord)
+            if parse(t) != nil || VoiceCommands.startsDictation(t) {
+                arm()
+                segment = t
+                update(t, final: final)
+            } else if final || text.count > 240 {
+                newTask()
+            }
+            return
+        }
         if armedUntil == nil {
             guard let wake = VoiceCommands.wake(in: text, word: config.wakeWord) else {
                 // Unrelated talk: start fresh now and then so transcripts stay short.
@@ -302,12 +322,37 @@ final class VoiceListener {
         if resting, intent != .wake, intent != .cancel {
             onMessage?("Resting · say \"\(config.wakeWord.phrase), wake up\"")
         } else {
+            switch intent {
+            case .startSession: startSession()
+            case .endSession, .rest: endSession()
+            default: if inSession { startSession() }   // each command keeps it going
+            }
             onIntent?(intent)
         }
         if wasOneShot { DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.stopIfOneShot() } }
     }
 
     private func parse(_ text: String) -> VoiceIntent? { VoiceCommands.parse(text, menu: menuTitles()) }
+
+    // MARK: Conversation mode
+
+    /// Starts conversation mode, or keeps it going for another quiet spell.
+    func startSession() {
+        let wasOn = inSession
+        inSession = true
+        sessionTimer?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.endSession() }
+        sessionTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(config.voiceSessionMinutes, 0.25) * 60, execute: work)
+        if !wasOn { onSession?(true) }
+    }
+
+    func endSession() {
+        sessionTimer?.cancel(); sessionTimer = nil
+        guard inSession else { return }
+        inSession = false
+        onSession?(false)
+    }
 
     /// The app in front changed: pick up its menu words, unless mid-command.
     func contextChanged() {
@@ -319,7 +364,8 @@ final class VoiceListener {
         disarm()
         newTask()
         state = .waiting
-        if !said.isEmpty { onMessage?("Didn't catch \"\(said)\"") }
+        // In conversation mode unrecognised talk is expected; say nothing.
+        if !said.isEmpty, !inSession { onMessage?("Didn't catch \"\(said)\"") }
         if oneShot { stopIfOneShot() }
     }
 

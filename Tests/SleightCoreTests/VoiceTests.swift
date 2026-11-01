@@ -105,6 +105,14 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(l.y, 0); XCTAssertGreaterThan(l.x, 0)
     }
 
+    func testConversationMode() {
+        XCTAssertEqual(VoiceCommands.parse("stay"), .startSession)
+        XCTAssertEqual(VoiceCommands.parse("keep listening"), .startSession)
+        XCTAssertEqual(VoiceCommands.parse("that's all"), .endSession)
+        XCTAssertEqual(VoiceCommands.parse("Thanks!"), .endSession)
+        XCTAssertEqual(VoiceCommands.parse("stop listening"), .rest, "rest still rests")
+    }
+
     func testWeakWakeNeedsARealCommand() {
         XCTAssertEqual(VoiceCommands.wake(in: "He slide mission control", word: .sleight), .init(command: "mission control", strong: false))
         XCTAssertEqual(VoiceCommands.wake(in: "Slide mission control", word: .sleight), .init(command: "mission control", strong: false))

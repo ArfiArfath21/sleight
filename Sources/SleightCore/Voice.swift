@@ -29,6 +29,8 @@ public enum VoiceIntent: Equatable, Sendable {
     case scrollFaster(steps: Int)
     case scrollSlower(steps: Int)
     case stopScrolling
+    /// Conversation mode: commands without the wake word until "done".
+    case startSession, endSession
     /// "never mind": close the listening chip without doing anything.
     case cancel
 }
@@ -227,6 +229,10 @@ public enum VoiceCommands {
         (.scrollSlower(steps: 1), ["slower", "slow down", "bit slower", "a bit slower", "little slower"]),
         (.scrollSlower(steps: 2), ["much slower", "a lot slower", "way slower"]),
         (.stopScrolling, ["stop", "stop scrolling", "pause scrolling", "hold on", "hold", "wait", "enough", "stop there"]),
+        (.startSession, ["stay", "stay with me", "keep listening", "listen", "command mode", "conversation mode",
+                         "continuous mode", "hands free", "let's go", "lets go", "stick around"]),
+        (.endSession, ["done", "that's all", "thats all", "that's it", "thats it", "thanks", "thank you",
+                       "finish", "finished", "exit", "goodbye", "bye", "dismiss", "i'm done", "im done"]),
         (.pointerMode, ["pointer mode", "pointer", "mouse mode", "cursor mode"]),
         (.gestureMode, ["gesture mode", "gestures", "exit pointer", "leave pointer mode", "stop pointer"]),
     ]

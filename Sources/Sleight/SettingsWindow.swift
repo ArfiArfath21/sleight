@@ -177,6 +177,8 @@ private struct VoiceSettings: View {
                         help: "After the wake word on its own, or after turning voice on.")
                 Tunable("Pause that ends a command", value: $store.config.voiceSettle, range: 0.3...1.5, format: "%.1f s",
                         help: "Shorter is snappier; longer gives app names time to arrive.")
+                Tunable("Conversation mode ends after", value: $store.config.voiceSessionMinutes, range: 0.5...10, format: "%.1f min",
+                        help: "Of no commands. \u{201C}\(word.title), stay\u{201D} (or turning voice on) starts it; \u{201C}done\u{201D} ends it.")
                 Tunable("Pause that ends dictation", value: $store.config.voiceDictationPause, range: 0.8...4, format: "%.1f s",
                         help: "For \u{201C}type …\u{201D}: how long a silence means you've finished.")
             }
