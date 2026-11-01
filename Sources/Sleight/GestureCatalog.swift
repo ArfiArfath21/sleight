@@ -72,7 +72,7 @@ enum GestureCatalog {
             ("\(p), export as PDF", "Any menu command of the app in front, by its name"),
             ("\(p), next tab twice", "Add \"twice\" or \"3 times\" to repeat"),
             ("\(p), pause / next track / volume up", "Media keys"),
-            ("\(p), type see you at six", "Types the words into whatever has focus"),
+            ("\(p), type / say see you at six", "Types what you say into the text field you're in"),
             ("\(p), search for flights to Goa", "Spotlight search"),
             ("\(p), rest / wake up", "Rests gestures and voice; only \"wake up\" works while resting"),
             ("\(p), pointer mode", "Pointer mode, without the gesture"),

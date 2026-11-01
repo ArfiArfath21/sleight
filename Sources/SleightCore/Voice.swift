@@ -217,7 +217,7 @@ public enum VoiceCommands {
     /// Words that add nothing ("please scroll down").
     static let filler: Set<String> = ["please", "can", "you", "could", "would", "just", "now", "the", "sleight"]
     static let switchVerbs = ["switch to", "go to", "open", "launch", "show me", "bring up", "start", "focus"]
-    static let typeVerbs: Set<String> = ["type", "write", "dictate", "insert"]
+    static let typeVerbs: Set<String> = ["type", "say", "write", "dictate", "insert"]
     static let webVerbs = ["google", "search the web for", "search google for", "search online for", "web search",
                            "search the internet for", "look up online"]
     static let searchVerbs = ["search for", "search", "look up", "find"]

@@ -116,6 +116,7 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(VoiceCommands.parse("Type: Hello, see you at 6. Thanks!"), .type("Hello, see you at 6. Thanks!"))
         XCTAssertEqual(VoiceCommands.afterWakePhrase("Jarvis, type Don't forget the milk."), "type Don't forget the milk.")
         XCTAssertEqual(VoiceCommands.parse("insert my email"), .type("my email"))
+        XCTAssertEqual(VoiceCommands.parse("say On my way, see you soon!"), .type("On my way, see you soon!"))
         XCTAssertNil(VoiceCommands.parse("type"), "wait for the words")
         XCTAssertTrue(VoiceCommands.startsDictation("Type."))
         XCTAssertEqual(VoiceCommands.parse("Type. Meet me at six."), .type("Meet me at six."), "words after a pause")
