@@ -139,21 +139,21 @@ struct Chip: Equatable {
             return Chip(symbol: "hand.pinch", title: "OK", detail: d.isEmpty ? nil : d)
         case .okSlideVertical:
             let a = map[.okSlideVertical]
-            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "slide up or down")
+            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "↕")
         case .okSlideSideways:
             let a = map[.okSlideSideways]
-            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "slide left or right")
+            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "↔")
         case .fist:
             let a = map[.fistSlideSideways]
-            return Chip(symbol: "hand.raised.fingers.spread", title: "Grab", detail: "slide sideways: \(a.title.lowercased())")
+            return Chip(symbol: "hand.raised.fingers.spread", title: "Grab", detail: "↔ \(a.title.lowercased())")
         case .fistSliding:
             let a = map[.fistSlideSideways]
-            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "slide to step · open hand to finish")
+            return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "↔")
         case .point:
             return Chip(symbol: "cursorarrow.rays", title: "Hold to point", detail: nil, progress: progress)
         case .curtains:
             return Chip(symbol: "rectangle.portrait.split.2x1", title: "Part the curtains",
-                        detail: "sweep apart: \(map[.curtains].title.lowercased())")
+                        detail: "↔ \(map[.curtains].title.lowercased())")
         case .frame:
             return Chip(symbol: "camera.viewfinder", title: "Hold the frame", detail: map[.frame].title.lowercased(), progress: progress)
         case .clap:
@@ -161,19 +161,17 @@ struct Chip: Equatable {
         }
     }
 
-    static let resting = Chip(symbol: "moon", title: "Sleight is resting", detail: "raise both hands and hold to wake")
+    static let resting = Chip(symbol: "moon", title: "Resting", detail: nil)
 
     static func pointer(progress: Double) -> Chip {
-        Chip(symbol: "cursorarrow", title: "Pointer",
-             detail: progress > 0.05 ? "keep the fist to exit" : "pinch click   ✌ flick scroll   ✊ hold to exit",
-             progress: progress)
+        Chip(symbol: "cursorarrow", title: "Pointer", detail: nil, progress: progress)
     }
 
     static func warning(_ w: HUDState.Warning) -> Chip {
         switch w {
         case .tooFar: return Chip(symbol: "arrow.up.left.and.arrow.down.right", title: "Move closer", detail: nil)
-        case .lowLight: return Chip(symbol: "sun.min", title: "Low light", detail: "tracking may suffer")
-        case .lowFPS: return Chip(symbol: "tortoise", title: "Camera is slow", detail: "add light")
+        case .lowLight: return Chip(symbol: "sun.min", title: "Low light", detail: nil)
+        case .lowFPS: return Chip(symbol: "tortoise", title: "Camera is slow", detail: nil)
         case .nearEdge: return Chip(symbol: "viewfinder", title: "Edge of camera view", detail: nil)
         }
     }
@@ -193,8 +191,8 @@ struct Chip: Equatable {
             if reason == .resting { return nil }
             return m == .pointer ? c("cursorarrow", "Pointer mode") : c("hand.raised", "Gestures")
         case .activeChanged(let on):
-            return on ? c("sparkle", "Sleight is listening")
-                : Chip(symbol: "moon", title: "Resting", detail: "both hands up to wake", accent: true)
+            return on ? c("sparkle", "Awake")
+                : Chip(symbol: "moon", title: "Resting", detail: nil, accent: true)
         default:
             return nil
         }
@@ -251,19 +249,19 @@ final class OverlayView: NSView {
         }
         ring.lineWidth = 2
         ring.strokeColor = NSColor.white.cgColor
-        ring.shadowColor = Brand.gold
+        ring.shadowColor = HUDStyle.green
         ring.shadowOpacity = 0.6
         ring.shadowRadius = 4
         ring.shadowOffset = .zero
-        fill.fillColor = Brand.gold
+        fill.fillColor = HUDStyle.green
 
         chipLayer.contentsScale = scale
         chipLayer.contentsGravity = .center
         chipLayer.opacity = 0
         chipLayer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "opacity": NSNull()]
         chipLayer.shadowColor = NSColor.black.cgColor
-        chipLayer.shadowOpacity = 0.35
-        chipLayer.shadowRadius = 18
+        chipLayer.shadowOpacity = 0.45
+        chipLayer.shadowRadius = 22
         chipLayer.shadowOffset = CGSize(width: 0, height: -4)
         root.addSublayer(chipLayer)
 
@@ -439,72 +437,67 @@ final class OverlayView: NSView {
     }
 }
 
-/// Draws chips into images (symbols + text + progress ring + brand accent).
+/// The overlay's palette: black glass, white type, one green accent.
+enum HUDStyle {
+    static let green = CGColor(srgbRed: 0.19, green: 0.82, blue: 0.35, alpha: 1)
+    static let fill = CGColor(srgbRed: 0.02, green: 0.02, blue: 0.02, alpha: 0.92)
+    static let hairline = CGColor(gray: 1, alpha: 0.09)
+}
+
+/// Draws chips into images: a black capsule, an icon, a title and an optional
+/// quiet detail. Green marks things Sleight just did or is doing.
 enum ChipRenderer {
     static func render(_ chip: Chip, scale: CGFloat) -> CGImage? {
-        let titleFont = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        let detailFont = NSFont.systemFont(ofSize: 12, weight: .regular)
-        let title = NSAttributedString(string: chip.title, attributes: [.font: titleFont, .foregroundColor: NSColor.white])
+        let titleFont = NSFont.systemFont(ofSize: 13.5, weight: .medium)
+        let detailFont = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        let title = NSAttributedString(string: chip.title, attributes: [
+            .font: titleFont, .foregroundColor: NSColor(white: 1, alpha: 0.95), .kern: 0.1])
         let detail = chip.detail.map {
-            NSAttributedString(string: $0, attributes: [.font: detailFont, .foregroundColor: NSColor(white: 1, alpha: 0.62)])
+            NSAttributedString(string: $0, attributes: [.font: detailFont, .foregroundColor: NSColor(white: 1, alpha: 0.42)])
         }
-        let iconBox: CGFloat = 30
-        let h: CGFloat = 46
-        let gap: CGFloat = 10
-        let textW = title.size().width + (detail.map { $0.size().width + 12 } ?? 0)
-        let w = ceil(14 + iconBox + gap + textW + 18)
+        let h: CGFloat = 40
+        let iconBox: CGFloat = 26
+        let pad: CGFloat = 7
+        let gap: CGFloat = 9
+        let textW = title.size().width + (detail.map { $0.size().width + 10 } ?? 0)
+        let w = ceil(pad + iconBox + gap + textW + 18)
+        let green = NSColor(cgColor: HUDStyle.green)!
 
         let image = NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
             let rect = CGRect(x: 0.5, y: 0.5, width: w - 1, height: h - 1)
-            let shape = CGPath(roundedRect: rect, cornerWidth: h / 2, cornerHeight: h / 2, transform: nil)
+            let shape = CGPath(roundedRect: rect, cornerWidth: rect.height / 2, cornerHeight: rect.height / 2, transform: nil)
             ctx.addPath(shape)
-            ctx.setFillColor(CGColor(srgbRed: 0.05, green: 0.06, blue: 0.10, alpha: 0.86))
+            ctx.setFillColor(HUDStyle.fill)
             ctx.fillPath()
-
-            // Border: brand gradient when confirming an action, hairline otherwise.
-            ctx.saveGState()
             ctx.addPath(shape)
-            ctx.setLineWidth(chip.accent ? 1.6 : 1)
-            ctx.replacePathWithStrokedPath()
-            ctx.clip()
-            if chip.accent {
-                let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                   colors: [Brand.gold, Brand.ivory, Brand.gold] as CFArray, locations: [0, 0.5, 1])!
-                ctx.drawLinearGradient(g, start: .zero, end: CGPoint(x: w, y: 0), options: [])
-            } else {
-                ctx.setFillColor(CGColor(gray: 1, alpha: 0.14))
-                ctx.fill(rect)
-            }
-            ctx.restoreGState()
+            ctx.setLineWidth(1)
+            ctx.setStrokeColor(chip.accent ? HUDStyle.green.copy(alpha: 0.28)! : HUDStyle.hairline)
+            ctx.strokePath()
 
-            // Icon.
-            let iconCenter = CGPoint(x: 14 + iconBox / 2, y: h / 2)
+            // Icon in a soft disc: green when it's Sleight acting, white otherwise.
+            let c = CGPoint(x: pad + iconBox / 2, y: h / 2)
+            ctx.setFillColor(chip.accent ? HUDStyle.green.copy(alpha: 0.14)! : CGColor(gray: 1, alpha: 0.07))
+            ctx.fillEllipse(in: CGRect(x: c.x - iconBox / 2, y: c.y - iconBox / 2, width: iconBox, height: iconBox))
             if chip.progress > 0 {
-                ctx.setLineWidth(2.5)
+                ctx.setLineWidth(2)
                 ctx.setLineCap(.round)
-                ctx.setStrokeColor(CGColor(gray: 1, alpha: 0.15))
-                ctx.addArc(center: iconCenter, radius: 15, startAngle: 0, endAngle: .pi * 2, clockwise: false)
-                ctx.strokePath()
-                ctx.setStrokeColor(Brand.gold)
-                ctx.addArc(center: iconCenter, radius: 15, startAngle: .pi / 2,
+                ctx.setStrokeColor(HUDStyle.green)
+                ctx.addArc(center: c, radius: iconBox / 2 - 1, startAngle: .pi / 2,
                            endAngle: .pi / 2 - .pi * 2 * CGFloat(min(chip.progress, 1)), clockwise: true)
                 ctx.strokePath()
             }
-            let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
-                .applying(.init(paletteColors: [chip.accent ? NSColor(cgColor: Brand.gold)! : .white]))
+            let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+                .applying(.init(paletteColors: [chip.accent ? green : NSColor(white: 1, alpha: 0.85)]))
             if let sym = NSImage(systemSymbolName: chip.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
                 let s = sym.size
-                sym.draw(in: CGRect(x: iconCenter.x - s.width / 2, y: iconCenter.y - s.height / 2, width: s.width, height: s.height))
+                sym.draw(in: CGRect(x: c.x - s.width / 2, y: c.y - s.height / 2, width: s.width, height: s.height))
             }
 
-            var x = 14 + iconBox + gap
-            let ty = (h - title.size().height) / 2
-            title.draw(at: CGPoint(x: x, y: ty))
-            x += title.size().width + 12
-            if let detail {
-                detail.draw(at: CGPoint(x: x, y: (h - detail.size().height) / 2))
-            }
+            var x = pad + iconBox + gap
+            title.draw(at: CGPoint(x: x, y: (h - title.size().height) / 2))
+            x += title.size().width + 10
+            detail?.draw(at: CGPoint(x: x, y: (h - (detail?.size().height ?? 0)) / 2))
             return true
         }
         var rect = CGRect(x: 0, y: 0, width: w * scale, height: h * scale)

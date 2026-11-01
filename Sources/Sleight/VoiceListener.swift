@@ -320,7 +320,7 @@ final class VoiceListener {
         newTask()
         state = .waiting
         if resting, intent != .wake, intent != .cancel {
-            onMessage?("Resting · say \"\(config.wakeWord.phrase), wake up\"")
+            onMessage?("Resting")
         } else {
             switch intent {
             case .startSession: startSession()
@@ -365,7 +365,7 @@ final class VoiceListener {
         newTask()
         state = .waiting
         // In conversation mode unrecognised talk is expected; say nothing.
-        if !said.isEmpty, !inSession { onMessage?("Didn't catch \"\(said)\"") }
+        if !said.isEmpty, !inSession { onMessage?("Didn't catch that") }
         if oneShot { stopIfOneShot() }
     }
 

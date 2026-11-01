@@ -19,6 +19,10 @@ enum Snapshots {
             Chip.cue(.curtains, progress: 0, map: map), Chip.resting, .pointer(progress: 0),
             Chip.flash(for: .recognized(.openSwipeRight), map: map), Chip.flash(for: .recognized(.veeFlickUp), map: map),
             Chip.flash(for: .activeChanged(true)),
+            Chip(symbol: "waveform", title: "Listening", detail: nil, accent: true),
+            Chip(symbol: "waveform", title: "switch to Claude", detail: nil, accent: true),
+            Chip(symbol: "arrow.up.forward.app", title: "Claude", detail: nil, accent: true),
+            Chip(symbol: "arrow.down", title: "Scrolling", detail: "3×", accent: true),
         ].compactMap { $0 }
         let images = chips.compactMap { ChipRenderer.render($0, scale: scale) }
         let width = (images.map { CGFloat($0.width) / scale }.max() ?? 300) + 80

@@ -115,8 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if store.config.cameraAtLaunch || !store.config.voiceEnabled {
             setEnabled(true)
         } else {
-            overlay.flash(Chip(symbol: "waveform", title: "Sleight is listening",
-                               detail: "say \u{201C}\(store.config.wakeWord.phrase), camera on\u{201D}", accent: true), seconds: 3)
+            overlay.flash(Chip(symbol: "waveform", title: "Listening", detail: nil, accent: true), seconds: 1.6)
         }
         idleTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.checkIdleCamera() }
         if !UserDefaults.standard.bool(forKey: "seenPractice") {
@@ -141,8 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             switch state {
             case .listening(let said):
-                self.overlay.voiceChip = Chip(symbol: "waveform", title: said.isEmpty ? "Listening…" : said,
-                                              detail: said.isEmpty ? "say a command" : nil, accent: true)
+                self.overlay.voiceChip = Chip(symbol: "waveform", title: said.isEmpty ? "Listening" : said, detail: nil, accent: true)
             case .unavailable(let why):
                 self.overlay.voiceChip = nil
                 self.overlay.flash(Chip(symbol: "mic.slash", title: "Voice unavailable", detail: why, accent: true), seconds: 3)
@@ -159,11 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         voice.onSession = { [weak self] on in
             guard let self else { return }
             self.sessionChip = on
-                ? Chip(symbol: "waveform", title: "Listening for commands",
-                       detail: "no need to say \(self.store.config.wakeWord.title) · \u{201C}done\u{201D} to finish", accent: true)
+                ? Chip(symbol: "waveform", title: "Listening", detail: nil, accent: true)
                 : nil
-            if !on { self.overlay.flash(Chip(symbol: "waveform", title: "Conversation over",
-                                             detail: "say \u{201C}\(self.store.config.wakeWord.title), stay\u{201D} to start again", accent: true), seconds: 1.6) }
+            if !on { self.overlay.flash(Chip(symbol: "checkmark", title: "Done", detail: nil, accent: true)) }
             if case .listening = self.voice.state {} else { self.overlay.voiceChip = self.scrollChip ?? self.sessionChip }
         }
         pipeline.inputMonitor.onDoubleTap = { [weak self] in self?.toggleVoice() }
@@ -197,7 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !store.config.voiceEnabled { voice.listenOnStart = true }
         store.config.voiceEnabled.toggle()
         if !store.config.voiceEnabled {
-            overlay.flash(Chip(symbol: "mic.slash", title: "Voice off", detail: "microphone closed", accent: true), seconds: 1.4)
+            overlay.flash(Chip(symbol: "mic.slash", title: "Voice off", detail: nil, accent: true), seconds: 1.4)
         }
     }
 
@@ -218,8 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Wheel axis: negative = content moves up (reveals what's below).
         pipeline.output.setAutoScroll(Vec2(0, scrollingUp ? speed : -speed))
         scrollChip = Chip(symbol: scrollingUp ? "arrow.up" : "arrow.down",
-                          title: "Scrolling · speed \(scrollLevel + 1) of \(Self.scrollSpeeds.count)",
-                          detail: "say faster, slower, up, down or stop", accent: true)
+                          title: "Scrolling", detail: "\(scrollLevel + 1)×", accent: true)
         overlay.voiceChip = scrollChip
     }
 
@@ -243,8 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if pipeline.shared.hud.handsVisible > 0 { lastHandSeen = now }
         if now - lastHandSeen > store.config.cameraIdleMinutes * 60 {
             setEnabled(false)
-            overlay.flash(Chip(symbol: "video.slash", title: "Camera off (no hands for a while)",
-                               detail: "say \u{201C}\(store.config.wakeWord.phrase), camera on\u{201D}", accent: true), seconds: 2.5)
+            overlay.flash(Chip(symbol: "video.slash", title: "Camera off", detail: nil, accent: true), seconds: 1.6)
         }
     }
 
@@ -273,8 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .type(let text):
             // Only into a text field: typed keys anywhere else become shortcuts.
             guard Self.textFocus() != .notText else {
-                overlay.flash(Chip(symbol: "character.cursor.ibeam", title: "No text field selected",
-                                   detail: "click into one, then say it again", accent: true), seconds: 2)
+                overlay.flash(Chip(symbol: "character.cursor.ibeam", title: "No text field", detail: nil, accent: true), seconds: 2)
                 return
             }
             pipeline.output.queue.async { [injector = pipeline.injector] in injector.type(text) }
