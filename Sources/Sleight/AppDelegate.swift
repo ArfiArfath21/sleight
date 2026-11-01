@@ -221,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         case .type(let text):
             // Only into a text field: typed keys anywhere else become shortcuts.
-            guard Self.focusedElementIsText() else {
+            guard Self.textFocus() != .notText else {
                 overlay.flash(Chip(symbol: "character.cursor.ibeam", title: "No text field selected",
                                    detail: "click into one, then say it again", accent: true), seconds: 2)
                 return
@@ -368,22 +368,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    static func focusedElementIsText() -> Bool {
-        let system = AXUIElementCreateSystemWide()
+    static func focusedElementIsText() -> Bool { textFocus() == .text }
+
+    enum TextFocus { case text, notText, unknown }
+
+    /// Is the keyboard focus somewhere text can go? Electron and Chromium apps
+    /// (Claude, Slack, VS Code…) only describe themselves to Accessibility once
+    /// asked to, so ask first. When it can't be told, say unknown, not no.
+    static func textFocus() -> TextFocus {
+        guard let front = NSWorkspace.shared.frontmostApplication else { return .unknown }
+        let app = AXUIElementCreateApplication(front.processIdentifier)
+        AXUIElementSetMessagingTimeout(app, 0.3)
+        var el = focusedElement(of: app)
+        if el == nil || isContainer(el!) {
+            AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+            usleep(120_000)
+            el = focusedElement(of: app) ?? el
+        }
+        guard let el else { return .unknown }
+        if isText(el) { return .text }
+        // A web area or group may hold a rich editor it doesn't describe.
+        return isContainer(el) ? .unknown : .notText
+    }
+
+    private static func focusedElement(of app: AXUIElement) -> AXUIElement? {
         var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID() else { return false }
-        let el = element as! AXUIElement
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let f = focused, CFGetTypeID(f) == AXUIElementGetTypeID() else { return nil }
+        return (f as! AXUIElement)
+    }
+
+    private static func role(_ el: AXUIElement) -> String? {
         var role: CFTypeRef?
         AXUIElementCopyAttributeValue(el, kAXRoleAttribute as CFString, &role)
+        return role as? String
+    }
+
+    private static func isContainer(_ el: AXUIElement) -> Bool {
+        ["AXWebArea", "AXGroup", "AXScrollArea", "AXWindow", "AXApplication", "AXUnknown"].contains(role(el) ?? "AXUnknown")
+    }
+
+    private static func isText(_ el: AXUIElement) -> Bool {
         let textRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField"]
-        if let r = role as? String, textRoles.contains(r) { return true }
+        if let r = role(el), textRoles.contains(r) { return true }
         // Editable web content (contenteditable, rich editors).
         var editable: CFTypeRef?
         if AXUIElementCopyAttributeValue(el, "AXEditable" as CFString, &editable) == .success, (editable as? Bool) == true {
             return true
         }
-        return false
+        // A text cursor you can type at.
+        var settable: DarwinBoolean = false
+        var range: CFTypeRef?
+        return AXUIElementCopyAttributeValue(el, kAXSelectedTextRangeAttribute as CFString, &range) == .success
+            && AXUIElementIsAttributeSettable(el, kAXValueAttribute as CFString, &settable) == .success && settable.boolValue
     }
 
     // MARK: Menu
