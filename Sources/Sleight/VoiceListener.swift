@@ -31,6 +31,8 @@ final class VoiceListener {
 
     private(set) var state: State = .off { didSet { if state != oldValue { onState?(state) } } }
     private(set) var running = false
+    /// Continuous scrolling is running: "faster", "slower", "stop" work alone.
+    var scrolling = false
     /// Listen for a command straight away once started (voice just turned on).
     var listenOnStart = false
     private var starting = false
@@ -206,6 +208,13 @@ final class VoiceListener {
         // `defaults write com.arfiarfath21.sleight voiceDebug -bool true` logs transcripts, for tuning.
         if UserDefaults.standard.bool(forKey: "voiceDebug") {
             NSLog("Sleight voice heard: \(text)\(final ? " (final)" : "")")
+        }
+        if armedUntil == nil, scrolling, VoiceCommands.wake(in: text, word: config.wakeWord) == nil,
+           let control = VoiceCommands.scrollControl(atEndOf: text) {
+            // No wake word needed: act at once and start a fresh transcript.
+            newTask()
+            onIntent?(control)
+            return
         }
         if armedUntil == nil {
             guard let wake = VoiceCommands.wake(in: text, word: config.wakeWord) else {

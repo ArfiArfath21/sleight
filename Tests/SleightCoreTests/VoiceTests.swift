@@ -80,6 +80,31 @@ final class VoiceTests: XCTestCase {
         XCTAssertEqual(VoiceCommands.parse("volume up"), .action(.volumeUp, times: 3))
     }
 
+    func testScrolling() {
+        XCTAssertEqual(VoiceCommands.parse("scroll right"), .action(.scrollRight, times: 1))
+        XCTAssertEqual(VoiceCommands.parse("scroll left twice"), .action(.scrollLeft, times: 2))
+        XCTAssertEqual(VoiceCommands.parse("keep scrolling"), .autoScroll(up: false))
+        XCTAssertEqual(VoiceCommands.parse("keep scrolling up"), .autoScroll(up: true))
+        XCTAssertEqual(VoiceCommands.parse("much faster"), .scrollFaster(steps: 2))
+        XCTAssertEqual(VoiceCommands.parse("stop scrolling"), .stopScrolling)
+        // While scrolling: the last words of whatever was heard, no wake word.
+        XCTAssertEqual(VoiceCommands.scrollControl(atEndOf: "this article is long. Faster"), .scrollFaster(steps: 1))
+        XCTAssertEqual(VoiceCommands.scrollControl(atEndOf: "okay slow down"), .scrollSlower(steps: 1))
+        XCTAssertEqual(VoiceCommands.scrollControl(atEndOf: "Stop."), .stopScrolling)
+        XCTAssertEqual(VoiceCommands.scrollControl(atEndOf: "go back up"), .autoScroll(up: true))
+        XCTAssertNil(VoiceCommands.scrollControl(atEndOf: "this is a good paragraph"))
+    }
+
+    func testScrollLeftRightMoveSideways() {
+        let c = SleightConfig()
+        guard case .scrollFlick(let r)? = ActionMapper.fire(.scrollRight, speed: nil, config: c).first,
+              case .scrollFlick(let l)? = ActionMapper.fire(.scrollLeft, speed: nil, config: c).first else {
+            return XCTFail("expected scroll flicks")
+        }
+        XCTAssertEqual(r.y, 0); XCTAssertLessThan(r.x, 0)
+        XCTAssertEqual(l.y, 0); XCTAssertGreaterThan(l.x, 0)
+    }
+
     func testWeakWakeNeedsARealCommand() {
         XCTAssertEqual(VoiceCommands.wake(in: "He slide mission control", word: .sleight), .init(command: "mission control", strong: false))
         XCTAssertEqual(VoiceCommands.wake(in: "Slide mission control", word: .sleight), .init(command: "mission control", strong: false))

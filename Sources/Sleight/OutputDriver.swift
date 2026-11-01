@@ -25,6 +25,14 @@ final class OutputDriver {
     private var glideStart = 0.0, glideDuration = 0.0
     private var gliding = false
     private var momentum: Vec2?
+    /// Continuous scroll velocity (pixels per second), until stopped or the user
+    /// touches a real keyboard or trackpad.
+    private var autoScroll: Vec2?
+    private var autoScrollStarted = 0.0
+    /// Last real keyboard / trackpad / mouse input (host time).
+    var lastRealInput: (() -> Double?)?
+    /// Continuous scroll stopped by real input (called on main).
+    var onAutoScrollInterrupted: (() -> Void)?
 
     private var timer: DispatchSourceTimer?
     private var timerRunning = false
@@ -39,6 +47,14 @@ final class OutputDriver {
         guard !actions.isEmpty else { return }
         queue.async { [self] in
             for a in actions { apply(a, frameInterval: frameInterval) }
+        }
+    }
+
+    func setAutoScroll(_ v: Vec2?) {
+        queue.async { [self] in
+            autoScroll = v
+            autoScrollStarted = CACurrentMediaTime()
+            if v != nil { momentum = nil; ensureTimer() }
         }
     }
 
@@ -113,6 +129,7 @@ final class OutputDriver {
 
         case .activeChanged:
             momentum = nil
+            autoScroll = nil
             notify(action)
 
         case .toggleKeyboard, .recognized:
@@ -171,6 +188,19 @@ final class OutputDriver {
             }
             v *= exp(-dt / max(config.momentumDecay, 0.05))
             if v.length < 20 { momentum = nil } else { momentum = v; busy = true }
+        }
+
+        if let v = autoScroll {
+            if let real = lastRealInput?(), real > autoScrollStarted + 0.3 {
+                autoScroll = nil
+                DispatchQueue.main.async { self.onAutoScrollInterrupted?() }
+            } else {
+                if !dryRun {
+                    shared.noteOwnScroll()
+                    injector.scroll(v * dt)
+                }
+                busy = true
+            }
         }
 
         if !busy, timerRunning {

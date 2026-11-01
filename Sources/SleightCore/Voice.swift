@@ -24,6 +24,11 @@ public enum VoiceIntent: Equatable, Sendable {
     case quit(String)
     /// Output volume, 0–100.
     case setVolume(Int)
+    /// Continuous scrolling, and its speed while it runs.
+    case autoScroll(up: Bool)
+    case scrollFaster(steps: Int)
+    case scrollSlower(steps: Int)
+    case stopScrolling
     /// "never mind": close the listening chip without doing anything.
     case cancel
 }
@@ -152,6 +157,8 @@ public enum VoiceCommands {
     public static let phrases: [(ActionID, [String])] = [
         (.scrollDown, ["scroll down", "down", "page down"]),
         (.scrollUp, ["scroll up", "up", "page up"]),
+        (.scrollLeft, ["scroll left"]),
+        (.scrollRight, ["scroll right"]),
         (.back, ["go back", "back"]),
         (.forward, ["go forward", "forward"]),
         (.nextTab, ["next tab"]),
@@ -211,6 +218,15 @@ public enum VoiceCommands {
                      "gestures on", "start gestures", "watch", "watch me", "eyes on"]),
         (.cameraOff, ["camera off", "stop camera", "turn off camera", "turn camera off",
                       "gestures off", "stop gestures", "stop watching", "eyes off"]),
+        (.autoScroll(up: false), ["keep scrolling", "keep scrolling down", "auto scroll", "autoscroll", "auto scroll down",
+                                  "start scrolling", "scroll slowly", "slow scroll", "scroll down slowly", "read mode",
+                                  "scroll continuously", "keep going down"]),
+        (.autoScroll(up: true), ["keep scrolling up", "auto scroll up", "autoscroll up", "scroll up slowly", "keep going up"]),
+        (.scrollFaster(steps: 1), ["faster", "speed up", "quicker", "bit faster", "a bit faster", "little faster"]),
+        (.scrollFaster(steps: 2), ["much faster", "a lot faster", "way faster"]),
+        (.scrollSlower(steps: 1), ["slower", "slow down", "bit slower", "a bit slower", "little slower"]),
+        (.scrollSlower(steps: 2), ["much slower", "a lot slower", "way slower"]),
+        (.stopScrolling, ["stop", "stop scrolling", "pause scrolling", "hold on", "hold", "wait", "enough", "stop there"]),
         (.pointerMode, ["pointer mode", "pointer", "mouse mode", "cursor mode"]),
         (.gestureMode, ["gesture mode", "gestures", "exit pointer", "leave pointer mode", "stop pointer"]),
     ]
@@ -290,6 +306,25 @@ public enum VoiceCommands {
         // The recogniser sometimes puts a comma or colon after the verb.
         while let c = text.first, ",:;.-".contains(c) { text.removeFirst(); text = text.trimmingCharacters(in: .whitespaces) }
         return text.isEmpty ? nil : text
+    }
+
+    /// While scrolling continuously, these work without the wake word: the
+    /// last few words of whatever was heard, if they are one of them.
+    public static func scrollControl(atEndOf transcript: String) -> VoiceIntent? {
+        let t = tokens(transcript)
+        for n in stride(from: min(3, t.count), through: 1, by: -1) {
+            let tail = t.suffix(n).map(\.key).joined(separator: " ")
+            for (intent, forms) in controls where forms.contains(tail) {
+                switch intent {
+                case .scrollFaster, .scrollSlower, .stopScrolling, .autoScroll: return intent
+                default: continue
+                }
+            }
+            // "up" / "down" turn it around.
+            if tail == "up" || tail == "scroll up" { return .autoScroll(up: true) }
+            if tail == "down" || tail == "scroll down" { return .autoScroll(up: false) }
+        }
+        return nil
     }
 
     /// "type …", including "type" on its own with the words still to come.

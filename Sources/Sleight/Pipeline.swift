@@ -34,6 +34,7 @@ final class Pipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         output = OutputDriver(injector: injector, shared: shared)
         inputMonitor = InputMonitor(shared: shared)
         super.init()
+        output.lastRealInput = { [inputMonitor] in inputMonitor.lastRealInput }
         camera = CameraCapture(delegate: self, queue: captureQueue)
         updateScreens()
         NotificationCenter.default.addObserver(self, selector: #selector(updateScreens),

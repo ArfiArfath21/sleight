@@ -143,7 +143,8 @@ turn it off and close the mic.
 | "Jarvis, camera on" · "camera off" | Starts or stops the camera. It starts **off**, and switches itself off after 5 minutes with no hands |
 | "Jarvis, switch to Claude" · "open Safari" · "quit Slack" | Any app: brings it forward (opening it if needed) or quits it |
 | "Jarvis, export as PDF" · "new Finder window" | **Any menu command of the app in front**, by its name |
-| "Jarvis, scroll down" · "go back" · "next tab" · "mission control" | Any action in the gesture list |
+| "Jarvis, scroll down" · "scroll right" · "go back" · "next tab" · "mission control" | Any action in the gesture list |
+| "Jarvis, keep scrolling" · "keep scrolling up" | **Continuous scrolling**, for reading. While it runs, just say "faster", "slower", "much faster", "up", "down" or "stop", with no wake word. Touching the trackpad or keyboard stops it too |
 | "Jarvis, undo" · "copy" · "paste" · "save" · "close tab" · "reload" · "press enter" | Everyday shortcuts and keys |
 | "Jarvis, next tab twice" · "undo 3 times" | Repeats |
 | "Jarvis, pause" · "next track" · "volume 30" · "mute" | Media and volume |

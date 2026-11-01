@@ -12,6 +12,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let menus = MenuIndex()
     private var idleTimer: Timer?
     private var subscriptions = Set<AnyCancellable>()
+    /// Continuous scrolling: speed level and direction.
+    private static let scrollSpeeds: [Double] = [25, 40, 60, 90, 135, 200, 300, 450]
+    private var scrollLevel = 2
+    private var scrollingUp = false
+    private var autoScrolling = false
+    private var scrollChip: Chip?
     private var lastHandSeen = CACurrentMediaTime()
     private var voiceItem = NSMenuItem()
     private(set) var overlay: Overlay!
@@ -140,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.overlay.voiceChip = nil
                 self.overlay.flash(Chip(symbol: "mic.slash", title: "Voice unavailable", detail: why, accent: true), seconds: 3)
             case .off, .waiting:
-                self.overlay.voiceChip = nil
+                self.overlay.voiceChip = self.scrollChip
             }
             self.refreshMenu()
         }
@@ -148,6 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.overlay.flash(Chip(symbol: "waveform", title: text, detail: nil, accent: true), seconds: 1.6)
         }
         voice.onIntent = { [weak self] intent in self?.perform(intent) }
+        pipeline.output.onAutoScrollInterrupted = { [weak self] in self?.stopAutoScroll(say: false) }
         pipeline.inputMonitor.onDoubleTap = { [weak self] in self?.toggleVoice() }
         applyVoice(store.config)
     }
@@ -185,6 +192,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func speakNow() { voice.listenNow() }
 
+    // MARK: Continuous scrolling
+
+    private func startAutoScroll(up: Bool) {
+        if !autoScrolling { scrollLevel = 2 }
+        autoScrolling = true
+        scrollingUp = up
+        voice.scrolling = true
+        applyAutoScroll()
+    }
+
+    private func applyAutoScroll() {
+        let speed = Self.scrollSpeeds[scrollLevel]
+        // Wheel axis: negative = content moves up (reveals what's below).
+        pipeline.output.setAutoScroll(Vec2(0, scrollingUp ? speed : -speed))
+        scrollChip = Chip(symbol: scrollingUp ? "arrow.up" : "arrow.down",
+                          title: "Scrolling · speed \(scrollLevel + 1) of \(Self.scrollSpeeds.count)",
+                          detail: "say faster, slower, up, down or stop", accent: true)
+        overlay.voiceChip = scrollChip
+    }
+
+    private func stopAutoScroll(say: Bool) {
+        guard autoScrolling else { return }
+        autoScrolling = false
+        voice.scrolling = false
+        pipeline.output.setAutoScroll(nil)
+        scrollChip = nil
+        overlay.voiceChip = nil
+        if say { overlay.flash(Chip(symbol: "stop.fill", title: "Stopped scrolling", detail: nil, accent: true)) }
+    }
+
     /// Voice can bring the camera back, so it needn't run with nobody there.
     private func checkIdleCamera() {
         let now = CACurrentMediaTime()
@@ -206,6 +243,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             overlay.flash(Chip(symbol: symbol, title: title, detail: nil, accent: true))
         }
         switch intent {
+        case .action(let a, let times) where autoScrolling && (a == .scrollUp || a == .scrollDown):
+            _ = times
+            startAutoScroll(up: a == .scrollUp)
         case .action(let a, let times):
             let actions = (0..<times).flatMap { _ in ActionMapper.fire(a, speed: nil, config: store.config) }
             pipeline.output.handle(actions, frameInterval: 0)
@@ -281,8 +321,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if enabled { pipeline.setMode(.pointer) } else { say("video.slash", "Camera is off") }
         case .gestureMode:
             pipeline.setMode(.command)
+        case .autoScroll(let up):
+            startAutoScroll(up: up)
+        case .scrollFaster(let steps):
+            if autoScrolling { scrollLevel = min(scrollLevel + steps, Self.scrollSpeeds.count - 1); applyAutoScroll() }
+        case .scrollSlower(let steps):
+            if autoScrolling { scrollLevel = max(scrollLevel - steps, 0); applyAutoScroll() }
+        case .stopScrolling:
+            if autoScrolling { stopAutoScroll(say: true) }
         case .cancel:
-            break
+            if autoScrolling { stopAutoScroll(say: true) }
         }
     }
 

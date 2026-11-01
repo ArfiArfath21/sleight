@@ -36,7 +36,7 @@ public enum ReservedGesture: String, CaseIterable, Sendable {
 public enum ActionID: String, Codable, CaseIterable, Sendable {
     case none
     // Scroll (with momentum: a harder flick scrolls further)
-    case scrollDown, scrollUp
+    case scrollDown, scrollUp, scrollLeft, scrollRight
     // Browse
     case back, forward, nextTab, previousTab, newTab, reopenTab
     // Windows & desktops
@@ -63,6 +63,8 @@ public enum ActionID: String, Codable, CaseIterable, Sendable {
         case .none: return "Nothing"
         case .scrollDown: return "Scroll down"
         case .scrollUp: return "Scroll up"
+        case .scrollLeft: return "Scroll left"
+        case .scrollRight: return "Scroll right"
         case .back: return "Back"
         case .forward: return "Forward"
         case .nextTab: return "Next tab"
@@ -130,7 +132,7 @@ public enum ActionID: String, Codable, CaseIterable, Sendable {
     public var group: String {
         switch self {
         case .none: return ""
-        case .scrollDown, .scrollUp: return "Scroll"
+        case .scrollDown, .scrollUp, .scrollLeft, .scrollRight: return "Scroll"
         case .back, .forward, .nextTab, .previousTab, .newTab, .reopenTab: return "Browse"
         case .desktopLeft, .desktopRight, .missionControl, .appWindows, .showDesktop,
              .previousApp, .hideApp, .minimize, .fullScreen: return "Windows"
@@ -208,16 +210,18 @@ public struct GestureMap: Codable, Equatable, Sendable {
 public enum ActionMapper {
     /// A one-shot action. `speed` (hand lengths per second) scales scrolling.
     public static func fire(_ a: ActionID, speed: Double?, config: SleightConfig) -> [EngineAction] {
-        func scroll(_ sign: Double) -> [EngineAction] {
+        func scroll(_ sign: Double, horizontal: Bool = false) -> [EngineAction] {
             let s = speed ?? 4
             let mag = clamp(s * config.scrollFlickGain, config.scrollFlickMin, config.scrollFlickMax)
-            // Wheel axis: negative = content moves up (reveals what's below).
-            return [.scrollFlick(velocity: Vec2(0, sign * mag))]
+            // Wheel axes: negative = content moves up / left (reveals what's below / to the right).
+            return [.scrollFlick(velocity: horizontal ? Vec2(sign * mag, 0) : Vec2(0, sign * mag))]
         }
         switch a {
         case .none: return []
         case .scrollDown: return scroll(-1)
         case .scrollUp: return scroll(1)
+        case .scrollLeft: return scroll(1, horizontal: true)
+        case .scrollRight: return scroll(-1, horizontal: true)
         case .back: return [.shortcut(.back)]
         case .forward: return [.shortcut(.forward)]
         case .nextTab: return [.shortcut(.nextTab)]

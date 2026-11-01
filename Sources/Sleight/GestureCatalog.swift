@@ -68,7 +68,8 @@ enum GestureCatalog {
         return [
             ("\(p), camera on / camera off", "Starts or stops the camera (and gestures)"),
             ("\(p), switch to Claude", "Brings any app forward, opening it if needed"),
-            ("\(p), scroll down / go back / next tab", "Any action in the gesture list, by name"),
+            ("\(p), scroll down / scroll right / go back / next tab", "Any action in the gesture list, by name"),
+            ("\(p), keep scrolling", "Scrolls slowly until you say stop; then just \"faster\", \"slower\", \"up\", \"down\", \"stop\""),
             ("\(p), export as PDF", "Any menu command of the app in front, by its name"),
             ("\(p), next tab twice", "Add \"twice\" or \"3 times\" to repeat"),
             ("\(p), pause / next track / volume up", "Media keys"),
@@ -105,6 +106,8 @@ enum GestureCatalog {
         case .none: return "circle"
         case .scrollDown: return "arrow.down"
         case .scrollUp: return "arrow.up"
+        case .scrollLeft: return "arrow.left"
+        case .scrollRight: return "arrow.right"
         case .back: return "chevron.backward"
         case .forward: return "chevron.forward"
         case .nextTab, .previousTab, .stepTabs: return "square.on.square"
