@@ -7,7 +7,7 @@ import Foundation
 /// - ✌️ flick up / down / left / right
 /// - ✋ swipe up / down / left / right
 /// - 👌 tap; 👌 hold, then slide up/down or sideways (sliders)
-/// - ✊ grab, then slide sideways (slider)
+/// - ✊ grab, then slide sideways (slider); ✊ flick up / down
 /// - ☝️ hold: pointer mode (reserved)
 ///
 /// Gestures assigned to "Nothing" are not even looked for, so they can never
@@ -42,6 +42,7 @@ public final class CommandEngine {
 
     private var swipes = FlickDetector()
     private var flicks = FlickDetector()
+    private var fistFlicks = FlickDetector()
     private var remote: Remote?
     private var grab: Grab?
     private var pointSince: Double?
@@ -67,6 +68,7 @@ public final class CommandEngine {
         pointSince = nil
         swipes.reset()
         flicks.reset()
+        fistFlicks.reset()
         return out
     }
 
@@ -145,10 +147,30 @@ public final class CommandEngine {
                 pointSince = nil
             }
 
-        case .fist, .other:
+        case .fist:
+            // Reached only when the grab is unassigned (or the fist hasn't settled yet).
+            if let actions = fistFlick(hand, time: t) {
+                hud.cue = .fist
+                r.actions += actions
+            }
+
+        case .other:
             break
         }
         return r
+    }
+
+    /// ✊ flicked up or down. nil = neither is assigned.
+    private func fistFlick(_ hand: TrackedHand, time t: Double) -> [EngineAction]? {
+        let slots: [(FlickDirection, GestureID)] = [(.up, .fistFlickUp), (.down, .fistFlickDown)]
+        let allow = Set(slots.filter { wanted($0.1) }.map(\.0))
+        guard !allow.isEmpty else { return nil }
+        let th = FlickDetector.Thresholds(minSpeed: config.swipeMinSpeed, minDistance: config.swipeMinDistance,
+                                          window: config.swipeWindow, dominance: config.swipeAxisDominance,
+                                          repeatGap: config.flickRepeatGap, returnGap: config.flickReturnGap)
+        guard let f = fistFlicks.detect(hand, shape: .fist, at: t, settle: config.settleTime, allow: allow, th),
+              let g = slots.first(where: { $0.0 == f.direction })?.1 else { return [] }
+        return fire(g, speed: f.speed)
     }
 
     /// ✌️ flicks, shared with pointer mode. nil = no ✌️ gesture is assigned.
@@ -263,6 +285,13 @@ public final class CommandEngine {
         // Opening the hand ends the slide (and picks the app, for the switcher).
         if hand.shape != .fist {
             if g.open { r.actions += ActionMapper.end(g.action, cancelled: false) }
+            grab = nil
+            return
+        }
+
+        // Before the slide starts, a fast vertical stroke is a fist flick instead.
+        if !g.open, let actions = fistFlick(hand, time: t), !actions.isEmpty {
+            r.actions += actions
             grab = nil
             return
         }

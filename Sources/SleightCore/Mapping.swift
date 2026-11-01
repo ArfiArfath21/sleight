@@ -9,8 +9,8 @@ public enum GestureID: String, Codable, CaseIterable, Sendable {
     case openSwipeLeft, openSwipeRight, openSwipeUp, openSwipeDown
     // 👌 OK sign
     case okTap, okSlideVertical, okSlideSideways
-    // ✊ fist, slid sideways
-    case fistSlideSideways
+    // ✊ fist, slid sideways or flicked up / down
+    case fistSlideSideways, fistFlickUp, fistFlickDown
     // two hands
     case curtains, frame, doubleClap
 
@@ -189,6 +189,8 @@ public struct GestureMap: Codable, Equatable, Sendable {
         .okSlideVertical: .none,
         .okSlideSideways: .none,
         .fistSlideSideways: .stepAppSwitcher,
+        .fistFlickUp: .none,
+        .fistFlickDown: .none,
         .curtains: .showDesktop,
         .frame: .screenshot,
         .doubleClap: .none,

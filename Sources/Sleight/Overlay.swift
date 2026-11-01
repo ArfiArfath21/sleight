@@ -144,8 +144,8 @@ struct Chip: Equatable {
             let a = map[.okSlideSideways]
             return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "↔")
         case .fist:
-            let a = map[.fistSlideSideways]
-            return Chip(symbol: "hand.raised.fingers.spread", title: "Grab", detail: "↔ \(a.title.lowercased())")
+            let d = list([("↔", .fistSlideSideways), ("↑", .fistFlickUp), ("↓", .fistFlickDown)])
+            return Chip(symbol: "hand.raised.fingers.spread", title: map.isAssigned(.fistSlideSideways) ? "Grab" : "Fist", detail: d)
         case .fistSliding:
             let a = map[.fistSlideSideways]
             return Chip(symbol: GestureCatalog.symbol(a), title: a.title, detail: "↔")

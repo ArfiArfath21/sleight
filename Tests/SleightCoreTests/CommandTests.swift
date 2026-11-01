@@ -631,6 +631,39 @@ final class MappingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(sim.shortcuts.filter { $0 == .nextTab }.count, 2)
     }
 
+    func testFistFlicksAreOffByDefault() {
+        XCTAssertFalse(GestureMap().isAssigned(.fistFlickUp))
+        XCTAssertFalse(GestureMap().isAssigned(.fistFlickDown))
+    }
+
+    func testFistFlicksAlongsideTheGrab() {
+        var c = SleightConfig()
+        c.gestures[.fistFlickUp] = .playPause
+        c.gestures[.fistFlickDown] = .mute
+        let sim = Sim(config: c)
+        var f = SyntheticHand.fist(at: Vec2(0.65, 0.6))
+        sim.hold(f, for: 0.3)
+        sim.move(&f, by: Vec2(0, -0.25), over: 0.15)
+        sim.hold(f, for: 0.8)
+        sim.move(&f, by: Vec2(0, 0.25), over: 0.15)
+        sim.hold(f, for: 0.3)
+        XCTAssertEqual(sim.media, [.playPause, .mute])
+        XCTAssertTrue(sim.switcher.isEmpty, "a vertical stroke must not open the app switcher")
+    }
+
+    func testFistFlicksWithoutTheGrab() {
+        var c = SleightConfig()
+        c.gestures[.fistSlideSideways] = .none
+        c.gestures[.fistFlickUp] = .missionControl
+        let sim = Sim(config: c)
+        var f = SyntheticHand.fist(at: Vec2(0.65, 0.6))
+        sim.hold(f, for: 0.3)
+        sim.move(&f, by: Vec2(0, -0.25), over: 0.15)
+        sim.hold(f, for: 0.3)
+        XCTAssertEqual(sim.shortcuts, [.missionControl])
+        XCTAssertEqual(sim.recognized, [.fistFlickUp])
+    }
+
     func testOneShotGestureIgnoresAStepAction() {
         var m = GestureMap()
         m[.veeFlickUp] = .stepVolume
